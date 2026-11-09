@@ -1,0 +1,168 @@
+{
+  "name": "context-viewer",
+  "displayName": "Context Viewer",
+  "description": "View-only Token Gauge and Context Inventory for Antigravity Conversations.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Context Viewer",
+      "properties": {
+        "contextViewer.roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "~/.gemini/antigravity/"
+          ],
+          "markdownDescription": "Data roots to scan (each has `brain/`, `conversations/`, `annotations/`, `conversation_summaries.db`). `~` is expanded."
+        },
+        "contextViewer.maxConversations": {
+          "type": "number",
+          "minimum": 1,
+          "default": 3,
+          "description": "Caps tree roots and status bar items, counting the Active Conversation."
+        },
+        "contextViewer.recentExpiryMinutes": {
+          "type": "number",
+          "default": 3,
+          "description": "A Recent Conversation is dropped this many minutes after it entered the Recent list."
+        },
+        "contextViewer.threshold": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "number"
+          },
+          "markdownDescription": "Per-model Threshold in thousands of tokens (`190` = 190k), keyed by model name without the effort level."
+        },
+        "contextViewer.threshold.default": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": 150,
+          "markdownDescription": "Fallback Threshold in thousands. Cleared: the model's Context window is the Threshold."
+        },
+        "contextViewer.limits": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "number"
+          },
+          "markdownDescription": "Per-model Context window override in tokens, keyed by model name without the effort level."
+        },
+        "contextViewer.limits.default": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "description": "Last-resort Context window in tokens. Empty: no limit known."
+        },
+        "contextViewer.heavyItemPercent": {
+          "type": "number",
+          "default": 5,
+          "description": "Chat Messages items above this % of the Context window are highlighted."
+        },
+        "contextViewer.hoverChars": {
+          "type": "number",
+          "default": 2000,
+          "description": "Hover cut-off for chat item text: head 75%, tail 25%; thinking budget 50%."
+        },
+        "contextViewer.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "error",
+          "description": "Output channel verbosity."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "contextViewer",
+          "title": "Context Viewer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "contextViewer": [
+        {
+          "id": "contextViewer.inventory",
+          "name": "Context Inventory"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "contextViewer.inventory",
+        "contents": "No configured data root was found on this host. Set [contextViewer.roots](command:workbench.action.openSettings?%5B%22contextViewer.roots%22%5D).",
+        "when": "contextViewer.noRoot"
+      },
+      {
+        "view": "contextViewer.inventory",
+        "contents": "Open or start a Conversation in the agent panel.\n[Refresh](command:contextViewer.refresh)",
+        "when": "!contextViewer.noRoot"
+      }
+    ],
+    "commands": [
+      {
+        "command": "contextViewer.refresh",
+        "title": "Context Viewer: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "contextViewer.reveal",
+        "title": "Context Viewer: Reveal Conversation"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "contextViewer.refresh",
+          "when": "view == contextViewer.inventory",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package --allow-missing-repository --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.107.0",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
