@@ -20,7 +20,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const logger = new Logger(channel, config.logLevel);
   const store = new Store();
   const statusBar = new StatusBar('contextViewer.reveal', () => config);
-  const provider = new ContextInventoryProvider(store, () => config);
+  let controllerRef: Controller | undefined;
+  const provider = new ContextInventoryProvider(store, () => config, {
+    readStep: (id, step) => controllerRef?.readStep(id, step) ?? null,
+    hoverChars: () => config.hoverChars,
+  });
   const decorations = new HeavyDecorationProvider();
   const treeView = vscode.window.createTreeView('contextViewer.inventory', {
     treeDataProvider: provider,
@@ -51,6 +55,7 @@ export function activate(context: vscode.ExtensionContext): void {
         : undefined,
       onNoRoot: (noRoot) => { void vscode.commands.executeCommand('setContext', 'contextViewer.noRoot', noRoot); },
     });
+    controllerRef = controller;
 
     context.subscriptions.push(
       channel,

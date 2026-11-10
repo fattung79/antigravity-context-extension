@@ -3,10 +3,20 @@ import type { Config } from '../config';
 import type { Store, StoreState } from '../model';
 import { levelFor, type Level } from './classify';
 import { nodeUri } from './decorations';
+import { getKnownToken } from '../logger';
+import { buildChatHover, buildMetaHover } from './hover';
 import {
   buildTreeHierarchy,
+  formatItemTokens,
   type RenderedItem,
 } from './treeModel';
+
+export interface HoverDeps {
+  /** Read one transcript line by step index (null when the step is missing). */
+  readStep: (conversationId: string, step: number) => Record<string, unknown> | null;
+  hoverChars: () => number;
+  token?: () => string | undefined;
+}
 
 export class ContextInventoryProvider
   implements vscode.TreeDataProvider<RenderedItem>
@@ -19,7 +29,11 @@ export class ContextInventoryProvider
   private roots: RenderedItem[] = [];
   private byId = new Map<string, RenderedItem>();
 
-  constructor(private store: Store, private config: () => Pick<Config, 'threshold' | 'thresholdDefault'>) {
+  constructor(
+    private store: Store,
+    private config: () => Pick<Config, 'threshold' | 'thresholdDefault'>,
+    private hover?: HoverDeps,
+  ) {
     this.state = store.get();
     this.rebuild();
     store.onChange((s) => {
@@ -102,6 +116,36 @@ export class ContextInventoryProvider
       item.iconPath = this.getKindIcon(element.kind, element.heavy);
     }
 
+    return item;
+  }
+
+  /** Lazy hover: text is read from the transcript only when the tooltip is requested. */
+  resolveTreeItem(item: vscode.TreeItem, element: RenderedItem): vscode.TreeItem {
+    if (element.type !== 'item') return item;
+    let md: string;
+    if (element.groupName === 'Chat Messages' && element.step !== undefined && element.conversationId && this.hover) {
+      const h = this.hover;
+      const read = (s: number | undefined) => {
+        if (s === undefined) return null;
+        try { return h.readStep(element.conversationId!, s); } catch { return null; }
+      };
+      md = buildChatHover({
+        label: element.label,
+        step: element.step,
+        call: element.call,
+        resultStep: element.resultStep,
+        line: read(element.step),
+        resultLine: read(element.resultStep),
+        hoverChars: h.hoverChars(),
+        token: (h.token ?? getKnownToken)(),
+      });
+    } else {
+      md = buildMetaHover({ name: element.label, count: element.tokens !== undefined ? formatItemTokens(element.tokens, element.estimated) : undefined, source: element.sourceLabel });
+    }
+    const ms = new vscode.MarkdownString(md);
+    ms.isTrusted = false;
+    ms.supportHtml = false;
+    item.tooltip = ms;
     return item;
   }
 

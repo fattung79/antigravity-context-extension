@@ -7,6 +7,8 @@ export interface GroupItem {
   kind?: string;
   estimated?: boolean;
   heavy?: boolean;
+  call?: number;
+  resultStep?: number;
 }
 
 export interface Group {

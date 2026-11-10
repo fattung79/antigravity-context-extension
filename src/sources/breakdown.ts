@@ -55,7 +55,7 @@ export function buildBreakdownGroups(
       const units = g.children.flatMap((c) => parseStepName(c.name, c.tokens) ?? [])
         .filter((u) => startStepIndex === null || u.step >= startStepIndex);
       const children: GroupItem[] = buildItems(units, steps, { estimated: false }).map((it) => ({
-        label: it.label, tokens: it.tokens, step: it.step, kind: it.kind,
+        label: it.label, tokens: it.tokens, step: it.step, kind: it.kind, call: it.call, resultStep: it.resultStep,
         estimated: false, heavy: isHeavy(it.tokens, limit, heavyPercent),
       }));
       return { name: g.name, tokens: g.tokens, children };

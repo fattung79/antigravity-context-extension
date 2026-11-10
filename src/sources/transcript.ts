@@ -100,10 +100,13 @@ export class TranscriptParser {
   /** Bytes consumed so far (never past an unterminated last line). */
   offset = 0;
   kept: KeptStep[] = [];
+  /** Byte position of each kept step's line (absolute file offsets), so hover reads only those bytes. */
+  lines = new Map<number, { start: number; length: number }>();
 
   reset(): void {
     this.offset = 0;
     this.kept = [];
+    this.lines.clear();
   }
 
   /** Feed bytes read from `this.offset`. Returns bytes consumed (up to the last newline). */
@@ -111,23 +114,30 @@ export class TranscriptParser {
     const b = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
     const lastNl = b.lastIndexOf(0x0a);
     if (lastNl < 0) return 0;
-    const text = b.subarray(0, lastNl + 1).toString('utf8');
-    for (const line of text.split('\n')) {
-      if (line.trim() === '') continue;
-      const step = parseLine(line);
-      if (step) this.push(step);
+    let pos = 0;
+    while (pos <= lastNl) {
+      let end = b.indexOf(0x0a, pos);
+      if (end < 0 || end > lastNl) end = lastNl;
+      const line = b.subarray(pos, end).toString('utf8');
+      if (line.trim() !== '') {
+        const step = parseLine(line);
+        if (step) this.push(step, { start: this.offset + pos, length: end - pos });
+      }
+      pos = end + 1;
     }
     this.offset += lastNl + 1;
     return lastNl + 1;
   }
 
   /** Rewind rule: entry index <= last kept index => drop kept entries with index >= it. */
-  push(step: KeptStep): void {
+  push(step: KeptStep, pos?: { start: number; length: number }): void {
     const last = this.kept[this.kept.length - 1];
     if (last && step.index <= last.index) {
       this.kept = this.kept.filter((k) => k.index < step.index);
+      for (const k of [...this.lines.keys()]) if (k >= step.index) this.lines.delete(k);
     }
     this.kept.push(step);
+    if (pos) this.lines.set(step.index, pos);
   }
 
   summary(): TranscriptSummary {
