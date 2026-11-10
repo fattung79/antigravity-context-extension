@@ -45,6 +45,44 @@ describe('TranscriptParser', () => {
     expect(p.summary().totals.calls).toBe(2);
   });
 
+  // Two runs writing into one transcript (leftover server, spec 13). Planner tokens tag the run:
+  // run A uses input = 1000 + index, run B uses input = 5000 + index.
+  const ln = (i: number, run: 'A' | 'B', type = 'PLANNER_RESPONSE') => JSON.stringify(
+    type === 'USER_INPUT'
+      ? { step_index: i, source: 'USER_EXPLICIT', type, content: `<USER_REQUEST>${run}</USER_REQUEST>` }
+      : { step_index: i, source: 'MODEL', type, input_tokens: (run === 'A' ? 1000 : 5000) + i, cache_read_tokens: 0, output_tokens: 1 },
+  );
+  const feed = (lines: string[]) => { const p = new TranscriptParser(); p.ingest(Buffer.from(lines.join('\n') + '\n')); return p; };
+  const runOf = (p: TranscriptParser) => p.kept.map((k) => (k.tokens ? (k.tokens.input >= 5000 ? 'B' : 'A') : 'u') + k.index);
+
+  it('interleaved runs: a late lower step from another run does not drop the live run (real 16c7dd2b pattern)', () => {
+    const A = (i: number) => ln(i, 'A');
+    const lines = [ln(0, 'A', 'USER_INPUT'), A(1), A(2), A(3), A(4), A(5), A(6), A(7), A(8),
+      ln(4, 'B', 'USER_INPUT'), ln(5, 'B'), A(9), ln(6, 'B'), A(10)];
+    expect(runOf(feed(lines))).toEqual(['u0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10']);
+    expect(feed(lines).summary().used).toBe(1010);
+  });
+
+  it('interleaved runs: follows the run that wrote the last line, back through its own steps', () => {
+    const lines = [ln(0, 'A', 'USER_INPUT'), ln(1, 'A'), ln(2, 'A'), ln(3, 'A'),
+      ln(2, 'B', 'USER_INPUT'), ln(4, 'A'), ln(3, 'B'), ln(5, 'A'), ln(4, 'B')];
+    // Last line is B4: B4 <- B3 <- u2 (B's user input) <- A1 <- u0.
+    expect(runOf(feed(lines))).toEqual(['u0', 'A1', 'u2', 'B3', 'B4']);
+  });
+
+  it('a gap in step indices links to the closest lower step, never cutting history', () => {
+    const p = feed([ln(0, 'A', 'USER_INPUT'), ln(1, 'A'), ln(3, 'A'), ln(4, 'A')]);
+    expect(p.kept.map((k) => k.index)).toEqual([0, 1, 3, 4]);
+  });
+
+  it('hover line positions follow the chosen run', () => {
+    const lines = [ln(0, 'A', 'USER_INPUT'), ln(1, 'A'), ln(2, 'A'), ln(1, 'B'), ln(3, 'A')];
+    const p = feed(lines);
+    const start = (n: number) => lines.slice(0, n).reduce((a, l) => a + Buffer.byteLength(l) + 1, 0);
+    expect(p.lines.get(1)).toEqual({ start: start(1), length: Buffer.byteLength(lines[1]!) });
+    expect([...p.lines.keys()]).toEqual([0, 1, 2, 3]);
+  });
+
   it('never counts CHECKPOINT tokens', () => {
     const s = parse('transcript-checkpoint.jsonl').summary();
     expect(s.used).toBe(205000);

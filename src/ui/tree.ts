@@ -117,6 +117,8 @@ export class ContextInventoryProvider
       item.contextValue = 'group';
       if (element.label === 'Baseline') {
         item.iconPath = new vscode.ThemeIcon('layers');
+        item.tooltip = 'Estimated: gauge minus Chat Messages, so it stands in for System Prompt + Tools in billed tokens. ' +
+          "Antigravity's own count usually runs higher; tool-heavy chats can push this estimate up.";
       } else if (element.label === 'Chat Messages') {
         item.iconPath = new vscode.ThemeIcon('history');
       } else if (element.label === 'System Prompt') {
