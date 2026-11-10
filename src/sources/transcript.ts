@@ -22,7 +22,9 @@ export interface TranscriptSummary {
 }
 
 const CHECKPOINT_PREFIX = '# Resuming from a compaction';
-const MODEL_CHANGE = /changed setting Model Selection from ([^\n<]+?) to ([^\n<]+)/;
+// Real wording: "The user changed setting `Model Selection` from A to B. No need to comment ...".
+// Names contain dots ("3.8"), so B ends at a period followed by whitespace, a newline or `<`.
+const MODEL_CHANGE = /changed setting `?Model Selection`? from ([^\n<]+?) to ([^\n<]+?)(?:\.(?=\s|$)|\n|<|$)/;
 const USER_REQUEST = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/;
 
 export function extractUserRequest(content: string): string {
@@ -84,7 +86,8 @@ export function parseLine(line: string): KeptStep | null {
 
   if (type === 'USER_INPUT' && contentStr) {
     const mc = MODEL_CHANGE.exec(contentStr);
-    if (mc) step.modelChange = { from: mc[1]!.trim(), to: mc[2]!.trim() };
+    // `from None` is the initial pick at step 0, not a switch.
+    if (mc && mc[1]!.trim() !== 'None') step.modelChange = { from: mc[1]!.trim(), to: mc[2]!.trim() };
     // Only the request text counts as context text (labels/sizes only are kept, never the text).
     const req = extractUserRequest(contentStr);
     step.contentLength = req.length;

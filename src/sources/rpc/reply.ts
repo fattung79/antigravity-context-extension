@@ -70,7 +70,8 @@ export function parseGeneratorMetadata(reply: unknown): RpcMeta | null {
   const totals = { input: 0, cacheRead: 0, output: 0, calls: 0 };
   const modelChanges: RpcMeta['modelChanges'] = [];
   let lastStepIndex: number | null = null;
-  let prevModel: string | null = null;
+  let prevDisplay: string | null = null;
+  let prevRaw: string | null = null;
   let lastExecutionId: string | null = null;
   let last: { cm: Obj; usage: Obj; breakdown: BreakdownGroup[] } | null = null;
 
@@ -99,15 +100,18 @@ export function parseGeneratorMetadata(reply: unknown): RpcMeta | null {
     totals.output += output;
     totals.calls += 1;
 
-    const display = typeof cm.modelDisplayName === 'string' ? cm.modelDisplayName
-      : typeof cm.responseModel === 'string' ? cm.responseModel : null;
-    if (display !== null) {
-      if (prevModel !== null && prevModel !== display) {
-        const first = Array.isArray(e.stepIndices) ? int(e.stepIndices[0], 'stepIndices', null) : null;
-        modelChanges.push({ step: first ?? 0, from: prevModel, to: display });
-      }
-      prevModel = display;
+    // Compare like with like: display names when both calls have one, else raw ids. A call with
+    // only a raw id (real d6fedd95) must not read as a switch away from a display name.
+    const display = typeof cm.modelDisplayName === 'string' && cm.modelDisplayName ? cm.modelDisplayName : null;
+    const raw = typeof cm.responseModel === 'string' && cm.responseModel ? cm.responseModel : null;
+    const [prev, cur] = display !== null && prevDisplay !== null ? [prevDisplay, display]
+      : raw !== null && prevRaw !== null ? [prevRaw, raw] : [null, null];
+    if (prev !== null && cur !== null && prev !== cur) {
+      const first = Array.isArray(e.stepIndices) ? int(e.stepIndices[0], 'stepIndices', null) : null;
+      modelChanges.push({ step: first ?? 0, from: prev, to: cur });
     }
+    if (display !== null) prevDisplay = display;
+    if (raw !== null) prevRaw = raw;
 
     const cw = isObj(cm.chatStartMetadata) && isObj(cm.chatStartMetadata.contextWindowMetadata)
       ? cm.chatStartMetadata.contextWindowMetadata : undefined;

@@ -225,6 +225,23 @@ describe('reply -> Snapshot', () => {
     expect(parseGeneratorMetadata(r)!.modelChanges).toEqual([{ step: 3, from: 'Gemini 3.8 Flash (Medium)', to: 'Other Model (High)' }]);
   });
 
+  it('a display name on one call and only a raw id on the next is not a model change', () => {
+    const r = JSON.parse(JSON.stringify(reply));
+    const cm = r.generatorMetadata[1].chatModel;
+    r.generatorMetadata[0].chatModel.responseModel = 'gemini-3.8-flash-n';
+    cm.responseModel = 'gemini-3.8-flash-n';
+    delete cm.modelDisplayName;
+    expect(parseGeneratorMetadata(r)!.modelChanges).toEqual([]);
+  });
+  it('raw ids are compared when display names are missing (real d6fedd95)', () => {
+    const r = JSON.parse(JSON.stringify(reply));
+    for (const [i, raw] of [[0, 'gemini-4-argon-trial'], [1, 'gemini-3.8-flash-n']] as const) {
+      delete r.generatorMetadata[i].chatModel.modelDisplayName;
+      r.generatorMetadata[i].chatModel.responseModel = raw;
+    }
+    expect(parseGeneratorMetadata(r)!.modelChanges).toEqual([{ step: 3, from: 'gemini-4-argon-trial', to: 'gemini-3.8-flash-n' }]);
+  });
+
   it('returns null when there is nothing usable (empty / in-flight only)', () => {
     expect(parseGeneratorMetadata({})).toBeNull();
     expect(parseGeneratorMetadata({ generatorMetadata: [] })).toBeNull();
