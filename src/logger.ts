@@ -3,7 +3,7 @@ export type LogLevel = 'off' | 'error' | 'info' | 'debug';
 const RANK: Record<LogLevel, number> = { off: 0, error: 1, info: 2, debug: 3 };
 
 // UUID-like value after csrf_token= / X-Codeium-Csrf-Token (header or flag form).
-const CSRF_SHAPE = /(csrf[_-]?token(?:["']?\s*[=:]\s*["']?))[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/gi;
+export const CSRF_SHAPE = /(csrf[_-]?token(?:["']?\s*[=:]\s*["']?))[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/gi;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 // Account-like fields (name, email, plan, tier) as key=value / "key": "value" pairs.
@@ -14,6 +14,10 @@ let knownToken: string | undefined;
 /** Register this window's live CSRF token (memory only) so it is masked verbatim. */
 export function setKnownToken(token: string | undefined): void {
   knownToken = token && token.length >= 8 ? token : undefined;
+}
+
+export function getKnownToken(): string | undefined {
+  return knownToken;
 }
 
 export function redact(line: string, token: string | undefined = knownToken): string {

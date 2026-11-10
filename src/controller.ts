@@ -236,6 +236,11 @@ export class Controller {
     this.notSelected = res.notSelected;
   }
 
+  /** Lazy hover read: one transcript line by step index, for any tracked Conversation. */
+  readStep(conversationId: string, step: number): Record<string, unknown> | null {
+    return this.tracks.get(conversationId)?.source?.readStepLine(step) ?? null;
+  }
+
   private pollFiles(): void {
     const ids = [...(this.activeId !== null ? [this.activeId] : []), ...this.deps.store.recentIds()];
     for (const id of [...this.tracks.keys()]) {

@@ -51,6 +51,14 @@ export function readTranscript(parser: TranscriptParser, file: string, io: FileI
   return changed;
 }
 
+/** Parse the JSON line stored at a byte range; null if unreadable. */
+export function readLineAt(file: string, pos: { start: number; length: number }, io: FileIo = realFileIo): Record<string, unknown> | null {
+  try {
+    const o = JSON.parse(io.read(file, pos.start, pos.start + pos.length).toString('utf8'));
+    return o && typeof o === 'object' ? (o as Record<string, unknown>) : null;
+  } catch { return null; }
+}
+
 /** Read the LAST gen_metadata row from a copy of the conversation db. Never exposes the blob. */
 export function readLastGenMetadata(copyPath: string, open: OpenDb): GenMetadata | null {
   const db = open(copyPath);
@@ -88,6 +96,13 @@ export class FileSource {
   readSteps(): KeptStep[] {
     readTranscript(this.parser, this.transcriptPath, this.deps.io);
     return this.parser.kept;
+  }
+
+  /** Read one step's raw JSON line by its recorded byte range (never the whole file). */
+  readStepLine(step: number): Record<string, unknown> | null {
+    const pos = this.parser.lines.get(step);
+    if (!pos) return null;
+    return readLineAt(this.transcriptPath, pos, this.deps.io);
   }
 
   /** Title fallback inputs from the transcript. */
@@ -144,6 +159,8 @@ export class FileSource {
       tokens: ci.tokens,
       step: ci.step,
       kind: ci.kind,
+      call: ci.call,
+      resultStep: ci.resultStep,
       estimated: true,
       heavy: isHeavy(ci.tokens, limit, heavyPercent),
     }));

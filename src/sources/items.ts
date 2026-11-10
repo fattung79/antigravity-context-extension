@@ -18,6 +18,9 @@ export interface ChatItem {
   label: string;
   tokens: number;
   heavy?: boolean;
+  /** Tool call position within the PLANNER_RESPONSE, and the paired result step (hover lookup). */
+  call?: number;
+  resultStep?: number;
 }
 
 export interface CompactStep {
@@ -187,6 +190,8 @@ export function buildItems(units: Unit[], steps: CompactStep[], opts: BuildOptio
           kind: err || rErr ? 'error' : classifyToolKind(tc.name),
           label: `#${u.step} ${tc.name}${tc.target ? ` ${tc.target}` : ''}`,
           tokens: (shares[j] ?? 0) + (r?.tokens ?? 0),
+          call: j,
+          resultStep: r?.step,
         });
       });
       i += results.length;

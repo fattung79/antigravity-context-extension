@@ -17,6 +17,14 @@ export interface RenderedItem {
   role?: 'active' | 'recent';
   notSelected?: boolean;
   children?: RenderedItem[];
+  /** Hover lookup keys (no text is stored). */
+  conversationId?: string;
+  groupName?: string;
+  step?: number;
+  call?: number;
+  resultStep?: number;
+  /** Data source for non-chat hover metadata: `rpc` | `file` | `~est`. */
+  sourceLabel?: string;
 }
 
 export function formatItemTokens(tokens: number, estimated?: boolean): string {
@@ -92,6 +100,12 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean,
         tokens: item.tokens,
         estimated: item.estimated,
         heavy: item.heavy,
+        conversationId: snap.conversationId,
+        groupName: g.name,
+        step: item.step,
+        call: item.call,
+        resultStep: item.resultStep,
+        sourceLabel: item.estimated || g.estimated ? '~est' : snap.source,
       }));
 
       return {
