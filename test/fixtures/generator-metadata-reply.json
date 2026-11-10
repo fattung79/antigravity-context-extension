@@ -1,0 +1,61 @@
+{
+  "generatorMetadata": [
+    {
+      "stepIndices": [1],
+      "executionId": "00000000-0000-0000-0000-000000000001",
+      "chatModel": {
+        "model": "MODEL_PLACEHOLDER_M319",
+        "responseModel": "gemini-3.8-flash-n",
+        "modelDisplayName": "Gemini 3.8 Flash (Medium)",
+        "usage": { "inputTokens": "13636", "outputTokens": "120", "thinkingOutputTokens": "80", "responseOutputTokens": "40", "apiProvider": "API_PROVIDER_X" },
+        "chatStartMetadata": {
+          "checkpointIndex": -1,
+          "contextWindowMetadata": {
+            "maxContextTokens": 256000,
+            "estimatedTokensUsed": 18730,
+            "tokenBreakdown": {
+              "totalTokens": 18730,
+              "groups": [
+                { "name": "System Prompt", "type": "TOKEN_TYPE_SYSTEM_PROMPT", "numTokens": 300, "children": [{ "name": "identity", "numTokens": 100 }, { "name": "user_rules", "numTokens": 200 }] },
+                { "name": "Tools", "type": "TOKEN_TYPE_TOOLS", "numTokens": 150, "children": [{ "name": "view_file", "numTokens": 80 }, { "name": "run_command", "numTokens": 70 }] },
+                { "name": "Chat Messages", "type": "TOKEN_TYPE_CHAT", "numTokens": 100, "children": [{ "name": "0: USER_INPUT", "numTokens": 100 }] }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "stepIndices": [3, 4],
+      "executionId": "00000000-0000-0000-0000-000000000002",
+      "chatModel": {
+        "model": "MODEL_PLACEHOLDER_M319",
+        "responseModel": "gemini-3.8-flash-n",
+        "modelDisplayName": "Gemini 3.8 Flash (Medium)",
+        "usage": { "inputTokens": "2000", "outputTokens": "60", "cacheReadTokens": "12000", "apiProvider": "API_PROVIDER_X" },
+        "chatStartMetadata": {
+          "checkpointIndex": -1,
+          "startStepIndex": 0,
+          "contextWindowMetadata": {
+            "maxContextTokens": 256000,
+            "estimatedTokensUsed": 19056,
+            "truncationReason": "TRUNCATION_REASON_MAX_TOKEN_LIMIT",
+            "tokenBreakdown": {
+              "totalTokens": 19056,
+              "groups": [
+                { "name": "System Prompt", "type": "TOKEN_TYPE_SYSTEM_PROMPT", "numTokens": 300, "children": [{ "name": "identity", "numTokens": 100 }, { "name": "user_rules", "numTokens": 200 }] },
+                { "name": "Tools", "type": "TOKEN_TYPE_TOOLS", "numTokens": 150, "children": [{ "name": "view_file", "numTokens": 80 }, { "name": "run_command", "numTokens": 70 }] },
+                { "name": "Chat Messages", "type": "TOKEN_TYPE_CHAT", "numTokens": 600, "children": [{ "name": "0: USER_INPUT", "numTokens": 100 }, { "name": "1: PLANNER_RESPONSE", "numTokens": 40 }, { "name": "2: GENERIC", "numTokens": 460 }] }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "stepIndices": [5],
+      "executionId": "00000000-0000-0000-0000-000000000003",
+      "chatModel": { "modelDisplayName": "Gemini 3.8 Flash (Medium)" }
+    }
+  ]
+}

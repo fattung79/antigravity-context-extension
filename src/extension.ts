@@ -4,6 +4,7 @@ import { Controller } from './controller';
 import { Logger } from './logger';
 import { RememberedLimits } from './limits';
 import { Store } from './model';
+import { readProcTable } from './sources/rpc/processTable';
 import { loadSqlite } from './sources/sqlite';
 import { HeavyDecorationProvider } from './ui/decorations';
 import { StatusBar } from './ui/statusBar';
@@ -40,6 +41,14 @@ export function activate(context: vscode.ExtensionContext): void {
       remembered: new RememberedLimits(context.globalState),
       storageUriFsPath: context.storageUri?.fsPath,
       workspaceUris: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.toString()),
+      rpc: process.platform === 'linux'
+        ? {
+          procs: readProcTable(),
+          hostPid: process.pid,
+          hostPpid: process.ppid,
+          workspaceFolders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
+        }
+        : undefined,
       onNoRoot: (noRoot) => { void vscode.commands.executeCommand('setContext', 'contextViewer.noRoot', noRoot); },
     });
 

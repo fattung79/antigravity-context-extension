@@ -9,6 +9,13 @@ import type { Logger } from './logger';
 import type { Store } from './model';
 import { INTERVALS_MS, Poller, sameStat, statKey, type StatKey, type Task } from './poller';
 import { FileSource } from './sources/file';
+import { RpcError } from './sources/rpc/client';
+import type { Clock } from './sources/rpc/clock';
+import { RpcManager } from './sources/rpc/manager';
+import type { ProcessTable } from './sources/rpc/processTable';
+import { Puller } from './sources/rpc/puller';
+import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata } from './sources/rpc/reply';
+import { StaleGuard } from './sources/rpc/staleGuard';
 import { DbCopier, type OpenDb } from './sources/sqlite';
 
 export interface ControllerDeps {
@@ -24,6 +31,15 @@ export interface ControllerDeps {
   onNoRoot?: (noRoot: boolean) => void;
   /** Persisted limits seen from server/database. */
   remembered?: RememberedLimits;
+  /** rpc source inputs; absent => file mode only. */
+  rpc?: {
+    procs: ProcessTable;
+    hostPid: number;
+    hostPpid: number;
+    workspaceFolders: string[];
+    transport?: import('./sources/rpc/client').Transport;
+    clock?: Clock;
+  };
 }
 
 /** Wires discovery + file source + store, driven by the stat poller. Never throws into the host. */
@@ -41,6 +57,12 @@ export class Controller {
   private source: FileSource | null = null;
   private fileStat: { t: StatKey | null; d: StatKey | null; w: StatKey | null; title: string; ns: boolean } | null = null;
   private forceNext = false;
+  private rpc: RpcManager | null = null;
+  private puller: Puller | null = null;
+  /** Conversations the server could not answer for: file source until Refresh. */
+  private fileOnly = new Set<string>();
+  private guard = new StaleGuard(2);
+  private lastKey: Controller['fileStat'] = null;
 
   constructor(private deps: ControllerDeps) {
     this.copier = new DbCopier(deps.storageDir);
@@ -49,6 +71,21 @@ export class Controller {
       { name: 'listing', intervalMs: INTERVALS_MS.listing, run: () => this.pollListing() },
       { name: 'files', intervalMs: INTERVALS_MS.conversationFiles, run: () => this.pollFiles() },
     ];
+    if (deps.rpc) {
+      const r = deps.rpc;
+      this.rpc = new RpcManager({
+        procs: r.procs, transport: r.transport, clock: r.clock, hostPid: r.hostPid, hostPpid: r.hostPpid,
+        workspaceFolders: () => r.workspaceFolders,
+        info: (m) => deps.logger.info(m),
+        debug: (m) => deps.logger.debug(m),
+        onRecovered: () => this.rpcSwitched(),
+      });
+      this.puller = new Puller({
+        clock: r.clock ?? { now: () => Date.now(), setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: (h) => clearTimeout(h as NodeJS.Timeout) },
+        fetch: (id) => this.pullRpc(id),
+        onError: (id, e) => deps.logger.error(`rpc pull failed for ${id}: ${(e as Error).message}`),
+      });
+    }
     this.poller = new Poller(tasks, (name, e) => this.deps.logger.error(`poll ${name} failed: ${(e as Error).message}`));
   }
 
@@ -57,6 +94,7 @@ export class Controller {
     this.deps.store.set({ noRoot: roots.length === 0 });
     this.deps.onNoRoot?.(roots.length === 0);
     if (roots.length === 0) return; // no-op guard: stay quiet
+    this.rpc?.start();
     this.poller.start();
   }
 
@@ -67,6 +105,13 @@ export class Controller {
     this.forceNext = true;
     this.selectionStat = null;
     this.summariesStat = null;
+    this.fileOnly.clear();
+    this.guard.reset();
+    if (this.rpc) {
+      const wasUp = this.rpc.up;
+      const up = this.rpc.refreshLookup();
+      if (up !== wasUp) this.fileStat = null;
+    }
     const roots = existingRoots(this.deps.config().roots);
     this.deps.store.set({ noRoot: roots.length === 0 });
     this.deps.onNoRoot?.(roots.length === 0);
@@ -79,7 +124,7 @@ export class Controller {
     void this.refresh();
   }
 
-  dispose(): void { this.poller.dispose(); }
+  dispose(): void { this.poller.dispose(); this.puller?.dispose(); this.rpc?.dispose(); }
 
   // ---- tasks -----------------------------------------------------------
 
@@ -161,6 +206,7 @@ export class Controller {
       this.activeId = res.id;
       this.source = null;
       this.fileStat = null;
+      this.guard.reset();
     }
     this.notSelected = res.notSelected;
   }
@@ -192,10 +238,23 @@ export class Controller {
       title, ns: this.notSelected,
     };
     const prev = this.fileStat;
+    const forced = this.forceNext;
     const unchanged = prev && !this.forceNext && sameStat(prev.t, key.t) && sameStat(prev.d, key.d) && sameStat(prev.w, key.w)
       && prev.title === key.title && prev.ns === key.ns;
     if (unchanged) return;
     this.forceNext = false;
+    if (this.rpc?.up && !this.fileOnly.has(info.id)) {
+      // rpc source: pull on change (settle + single flight handled by the puller).
+      this.fileStat = key;
+      this.lastKey = key;
+      this.puller?.notifyChange(info.id, forced);
+      return;
+    }
+    this.updateFromFile(info, sum, title, key);
+  }
+
+  private updateFromFile(info: ConversationInfo, sum: SummaryRow | undefined, title: string, key: NonNullable<Controller['fileStat']>): void {
+    if (!this.source) return;
     try {
       const snap = this.source.update(title, { notSelected: this.notSelected, role: 'active' });
       // Title may now come from the transcript's first prompt (after parsing).
@@ -211,5 +270,87 @@ export class Controller {
       this.deps.logger.error(`file read failed for ${info.id}: ${(e as Error).message}`);
       this.deps.store.set({ stale: true });
     }
+  }
+
+  // ---- rpc -------------------------------------------------------------
+
+  /** rpc went down or came back: re-evaluate the active Conversation from its best source now. */
+  private rpcSwitched(): void {
+    this.fileStat = null;
+    this.guard.reset();
+    this.pollFiles();
+  }
+
+  private rpcFailure(id: string, e: unknown): void {
+    const err = e instanceof RpcError ? e : null;
+    if (!err || err.kind === 'auth' || err.kind === 'connection') {
+      this.rpc?.fail(err ? `${err.kind} failure (${err.message})` : 'unexpected failure');
+    } else {
+      // The server cannot return this Conversation's details: file for that Conversation only.
+      this.fileOnly.add(id);
+      this.deps.logger.info(`rpc: ${err.message}; using file for ${id}`);
+    }
+    this.rpcSwitched();
+  }
+
+  private async pullRpc(id: string): Promise<void> {
+    const rpc = this.rpc;
+    if (!rpc?.up || id !== this.activeId || !this.source) return;
+    const info = this.conversations.find((c) => c.id === id);
+    if (!info) return;
+    const source = this.source;
+    let steps: ReturnType<FileSource['readSteps']> = [];
+    try { steps = source.readSteps(); } catch (e) { this.deps.logger.debug(`transcript read failed: ${(e as Error).message}`); }
+
+    let meta;
+    try {
+      meta = parseGeneratorMetadata(await rpc.call('GetCascadeTrajectoryGeneratorMetadata', { cascadeId: id }));
+    } catch (e) {
+      if (id === this.activeId) this.rpcFailure(id, e);
+      return;
+    }
+    if (id !== this.activeId || this.source !== source) return; // switched while waiting
+
+    const transcriptLast = lastPlannerStep(steps);
+    if (!meta) {
+      // No usable call for this Conversation: file source. If the transcript already has planner
+      // steps the server does not know it => file for this Conversation until Refresh.
+      if (transcriptLast !== null) {
+        this.fileOnly.add(id);
+        this.deps.logger.info(`rpc: no data for ${id}; using file for it`);
+      }
+      this.guard.reset();
+      const title = resolveTitle({
+        summaryTitle: this.summaries.get(id)?.title, preview: this.summaries.get(id)?.preview,
+        firstPrompt: source.summary().firstPrompt, lastActivity: source.summary().lastActivity,
+      });
+      this.updateFromFile(info, this.summaries.get(id), title, { ...(this.lastKey ?? { t: null, d: null, w: null, ns: this.notSelected }), title });
+      return;
+    }
+    if (this.guard.check(meta.lastStepIndex, transcriptLast)) {
+      this.rpc?.fail('server stale (trails the transcript)');
+      this.rpcSwitched();
+      return;
+    }
+    const sum = this.summaries.get(id);
+    const titleOf = () => resolveTitle({
+      summaryTitle: sum?.title, preview: sum?.preview,
+      firstPrompt: source.summary().firstPrompt, lastActivity: source.summary().lastActivity,
+    });
+    const cfg = this.deps.config();
+    const snap = buildRpcSnapshot(meta, {
+      conversationId: id,
+      title: titleOf(),
+      steps,
+      limitOverrides: cfg.limits,
+      limitDefault: cfg.limitsDefault,
+      remembered: this.deps.remembered?.all(),
+      heavyPercent: cfg.heavyItemPercent,
+      notSelected: this.notSelected,
+      role: 'active',
+    });
+    this.deps.remembered?.remember(snap.modelKey, meta.maxContextTokens);
+    this.deps.store.set({ stale: false });
+    this.deps.store.setActive(snap);
   }
 }
