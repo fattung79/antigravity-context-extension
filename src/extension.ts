@@ -8,7 +8,10 @@ import { readProcTable } from './sources/rpc/processTable';
 import { loadSqlite } from './sources/sqlite';
 import { HeavyDecorationProvider } from './ui/decorations';
 import { StatusBar } from './ui/statusBar';
-import { ContextInventoryProvider } from './ui/tree';
+import { ContentProvider, openContent } from './ui/contentProvider';
+import { CONTENT_SCHEME, type ContentRef } from './ui/openContent';
+import { ContextInventoryProvider, openKindOf } from './ui/tree';
+import type { RenderedItem } from './ui/treeModel';
 
 export function activate(context: vscode.ExtensionContext): void {
   const channel = vscode.window.createOutputChannel('Context Viewer');
@@ -74,6 +77,18 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBar.render(store.get());
         provider.refresh();
         decorations.refresh();
+      }),
+      vscode.workspace.registerTextDocumentContentProvider(CONTENT_SCHEME, new ContentProvider({
+        readStep: (id, step) => controller.readStep(id, step),
+        readRequestBlob: (id) => controller.readRequestBlob(id),
+      })),
+      vscode.commands.registerCommand('contextViewer.openItem', async (el?: RenderedItem) => {
+        const kind = el ? openKindOf(el) : undefined;
+        if (!el?.conversationId || !kind) return;
+        let ref: ContentRef | undefined;
+        if (kind === 'chat' && el.step !== undefined) ref = { conversationId: el.conversationId, kind: 'step', step: el.step, call: el.call, resultStep: el.resultStep };
+        else if (el.name) ref = { conversationId: el.conversationId, kind: kind === 'tool' ? 'tool' : 'section', name: el.name };
+        if (ref) { try { await openContent(ref); } catch (e) { logger.error(`open item failed: ${(e as Error).message}`); } }
       }),
       vscode.commands.registerCommand('contextViewer.refresh', () => controller.refresh()),
       vscode.commands.registerCommand('contextViewer.reveal', async (conversationId?: unknown) => {

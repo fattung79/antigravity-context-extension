@@ -8,7 +8,7 @@ import type { RememberedLimits } from './limits';
 import type { Logger } from './logger';
 import type { Snapshot, Store } from './model';
 import { INTERVALS_MS, Poller, sameStat, statKey, type StatKey, type Task } from './poller';
-import { FileSource } from './sources/file';
+import { FileSource, readLastBlob } from './sources/file';
 import { RpcError } from './sources/rpc/client';
 import type { Clock } from './sources/rpc/clock';
 import { RpcManager } from './sources/rpc/manager';
@@ -241,6 +241,21 @@ export class Controller {
     return this.tracks.get(conversationId)?.source?.readStepLine(step) ?? null;
   }
 
+  /** Lazy read of the last gen_metadata blob (request snapshot) via a private db copy. Explicit Open only; never logged. */
+  readRequestBlob(conversationId: string): Uint8Array | null {
+    const info = this.conversations.find((c) => c.id === conversationId);
+    if (!info || !this.deps.openDb) return null;
+    const name = `open-${conversationId}.db`;
+    try {
+      const c = this.copier.copy(info.dbPath, name);
+      if (!c) return null;
+      return readLastBlob(c.path, this.deps.openDb);
+    } catch (e) {
+      this.copier.invalidate(name);
+      this.deps.logger.error(`open item: db read failed for ${conversationId}: ${(e as Error).message}`);
+      return null;
+    }
+  }
   private pollFiles(): void {
     const ids = [...(this.activeId !== null ? [this.activeId] : []), ...this.deps.store.recentIds()];
     for (const id of [...this.tracks.keys()]) {

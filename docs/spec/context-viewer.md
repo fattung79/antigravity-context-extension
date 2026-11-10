@@ -16,7 +16,7 @@ Jobs: watch the budget, debug the agent. Live (a few seconds of lag is fine) plu
 
 **Non-goals.**
 - Editing or curating the context (view only).
-- A full transcript viewer.
+- A full transcript viewer. (Opening ONE step, System Prompt section or tool as a read-only tab is allowed, section 7.4; a whole-transcript view is not.)
 - Publishing to Open VSX.
 - Patching, injecting into, or modifying Antigravity (see section 9).
 - Push updates, server data for Windows-local windows, plain VS Code support (section 14).
@@ -125,7 +125,8 @@ Both sources produce the same `Snapshot` type (section 6). Source is shown as `r
 
 **SQLite** (`conversations/<id>.db`): model, limit, breakdown, when readable.
 - Built-in `node:sqlite` (`DatabaseSync`). Copy `<id>.db`, `-wal`, `-shm` together into the extension storage folder; open the COPY read-write (so SQLite merges the WAL into the copy); never open the originals; re-copy only when the source `.db` or `-wal` mtime or size changed. Avoid opening anything in place over `/mnt/c`.
-- Table `gen_metadata(idx PK, data BLOB, size)`, one row per model call; read the LAST row only for the fields below, but never log or display the last row's large blob (request snapshot). Protobuf field paths inside `data`: `.1.4.2` input tokens, `.1.4.5` cache read (absent = 0), `.1.4.3` output tokens, `.1.21` display model name (e.g. `Gemini 3.8 Flash (Medium)`), `.1.9.10.4` model context limit, `.1.9.10.1` agent's estimate, `.1.9.10.3.1[]` breakdown `{1 name, 4 tokens, 5[] {1 name, 3 tokens}}`, `.1.9.1` startStepIndex (Compaction cross-check).
+- Table `gen_metadata(idx PK, data BLOB, size)`, one row per model call; read the LAST row only for the fields below, but never log the last row's large blob (request snapshot); it is displayed only per explicit Open (7.4). Protobuf field paths inside `data`: `.1.4.2` input tokens, `.1.4.5` cache read (absent = 0), `.1.4.3` output tokens, `.1.21` display model name (e.g. `Gemini 3.8 Flash (Medium)`), `.1.9.10.4` model context limit, `.1.9.10.1` agent's estimate, `.1.9.10.3.1[]` breakdown `{1 name, 4 tokens, 5[] {1 name, 3 tokens}}`, `.1.9.1` startStepIndex (Compaction cross-check).
+- Request snapshot paths used ONLY by the explicit "Open" action (section 7.4), found 2026-11-09: `.1.16[]` = System Prompt section `{1 name, 2 text}` (name = the `.1.9.10.3.1[]` System Prompt child name, e.g. `identity`, `user_rules`); `.1.8[]` = tool definition `{1 name, 2 description, 3 parameters schema (JSON text)}` (name = the Tools child name). `.1.1` is the same prompt concatenated and is not used. Mapping: exact name match, else case/punctuation-insensitive; first match wins; no match => one-line "Text unavailable" document. The `user_information` section (any spelling) is never read or shown.
 - If `node:sqlite` is unavailable: file mode uses the transcript only (no model, limit, or breakdown; gauge `ctx 124k / ?~`).
 - Model for a Conversation with no `gen_metadata` rows: `last_selected_agent_model` in `~/.gemini/antigravity/antigravity_state.pbtxt` (global).
 - Do NOT use `antigravity_stats_cache.json` (stale, inconsistent) or the `trajectorySummaries` key in the global `state.vscdb` (stale protobuf index).
@@ -240,10 +241,16 @@ Chat Messages children come from the breakdown names `"<stepIndex>: <STEP_TYPE>"
 ### 7.4 Hover (tree items)
 - Loaded lazily in `resolveTreeItem`, reading that step from the transcript by step index. Store holds no text.
 - Cut-off (`hoverChars` = 2000): first 1500 chars, then `… N chars omitted …`, then last 500. Thinking: own section headed `Thinking` with its own `~Nk tok`, head only, up to 1000 chars (half of `hoverChars`).
-- Non-chat items (System Prompt sections incl. `user_information`, Tools, rules, skills): name, token count, source (`rpc`/`file`/`~est`) only; their text is never fetched.
+- Non-chat items (System Prompt sections incl. `user_information`, Tools, rules, skills): name, token count, source (`rpc`/`file`/`~est`) only; their text is never fetched by hover.
 - Masking: this window's live CSRF token (exact string) and the token-shape regex (the same one used by log redaction) are replaced with `‹csrf›`. Emails and paths are not masked. `GetUserStatus` data is never shown.
 - Rendering: untrusted `MarkdownString` (`isTrusted: false`, `supportHtml: false`, no command links). User and model text as markdown; tool output in a fenced code block with backticks escaped.
 - Step missing (compacted away or rewound): `text unavailable`, count still shown.
+
+**Open (`contextViewer.openItem`).** Inline button and context menu on Chat Messages, System Prompt section and Tools items (`contextValue` `chat` / `section` / `tool`); also the click command of Chat Messages items. Opens a read-only virtual document (`TextDocumentContentProvider`, scheme `context-viewer`, language Markdown, `preview: true`); content is decoded lazily on open only and never cached by the extension.
+- Chat Messages: ONE step per tab, full text with no cut-off, as Markdown sections: `User request`, `Thinking`, `Model reply`, `Tool call: <name> <target>` (args as JSON), `Tool result`. Masking: CSRF token and token shape (same as hover).
+- System Prompt section / Tool: text from the request snapshot in the LAST `gen_metadata` row of the Conversation's db (section 4.2 paths), read from a private copy (`open-<id>.db`, existing copy mechanism). Masking: `maskSecrets` plus logger `redact` (tokens, emails, account fields). `user_information` is refused in the pure builder (normalised-name check before and after lookup; embedded `<user_information>` blocks stripped from other sections) and covered by tests.
+- Failure (no db, no `node:sqlite`, parse error, name not found): one-line friendly document; no blob content is ever logged.
+- Rules "Open file" (real rule file path via `GetTokenBase`) is not implemented: the reply's path field is unverified and not cheap to confirm.
 
 ### 7.5 Empty state
 - Status bar `◌ ctx —`, tooltip "No Conversation yet".
@@ -281,7 +288,7 @@ All in one place so they can be audited. Cf. [ADR 0001](../adr/0001-rpc-primary-
 5. **No patching or injection** into Antigravity, its bundled extensions, or the agent panel. Only public VS Code APIs plus file reads and loopback HTTP.
 6. **Loopback only:** RPC to `127.0.0.1` hub port only.
 7. **Webview-free:** no webviews; hovers are untrusted Markdown (section 7.4).
-8. **Large blob guard:** the last `gen_metadata` row embeds a request snapshot; never log or render it.
+8. **Large blob guard:** the last `gen_metadata` row embeds a request snapshot; never log it. It is rendered only on an explicit "Open" of one System Prompt section or tool (section 7.4), masked, and NEVER the `user_information` section (refused in code, tested).
 9. **Server choice:** only this window's server (parent = extension host); never pick another window's.
 10. **Failure mode:** any rpc failure degrades to `file`; any file failure degrades to the last good snapshot, marked stale in the tooltip. Never throw to the VS Code host.
 
