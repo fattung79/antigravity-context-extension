@@ -1,5 +1,5 @@
 import { normaliseModelKey, resolveLimit } from '../../limits';
-import type { Group, Snapshot } from '../../model';
+import type { Group, RuleFile, Snapshot } from '../../model';
 import { detectCompaction } from '../compaction';
 import { buildBreakdownGroups, type BreakdownGroup } from '../breakdown';
 import type { CompactStep } from '../items';
@@ -23,6 +23,8 @@ export interface RpcMeta {
   modelChanges: { step: number; from: string; to: string }[];
   /** Highest step index any call produced (stale-server guard). null when none reported. */
   lastStepIndex: number | null;
+  /** executionId of the last call that has one (cache key for rule files). */
+  lastExecutionId: string | null;
 }
 
 type Obj = Record<string, unknown>;
@@ -69,10 +71,12 @@ export function parseGeneratorMetadata(reply: unknown): RpcMeta | null {
   const modelChanges: RpcMeta['modelChanges'] = [];
   let lastStepIndex: number | null = null;
   let prevModel: string | null = null;
+  let lastExecutionId: string | null = null;
   let last: { cm: Obj; usage: Obj; breakdown: BreakdownGroup[] } | null = null;
 
   for (const e of entries) {
     if (!isObj(e)) return bad('entry');
+    if (typeof e.executionId === 'string' && e.executionId) lastExecutionId = e.executionId;
     if (Array.isArray(e.stepIndices)) {
       for (const s of e.stepIndices) {
         const n = int(s, 'stepIndices', null);
@@ -135,6 +139,7 @@ export function parseGeneratorMetadata(reply: unknown): RpcMeta | null {
     totals,
     modelChanges,
     lastStepIndex,
+    lastExecutionId,
   };
 }
 
@@ -150,6 +155,7 @@ export interface SnapshotContext {
   heavyPercent: number;
   notSelected: boolean;
   role: Snapshot['role'];
+  ruleFiles?: RuleFile[] | null;
 }
 
 /** Reply facts + transcript labels -> Snapshot (source 'rpc'). Groups are Antigravity's own counts. */
@@ -183,7 +189,37 @@ export function buildRpcSnapshot(meta: RpcMeta, ctx: SnapshotContext): Snapshot 
     truncationReason: meta.truncationReason,
     notSelected: ctx.notSelected,
     role: ctx.role,
+    ...(ctx.ruleFiles ? { ruleFiles: ctx.ruleFiles } : {}),
   };
+}
+
+/**
+ * Rule files from a GetCascadeTrajectoryExecutorMetadatas reply: enabled RULE customizations with an
+ * absolute path, from the last executor entry that lists customizations. null when unusable. Never throws.
+ */
+export function parseRuleFiles(reply: unknown): RuleFile[] | null {
+  try {
+    if (!isObj(reply) || !Array.isArray(reply.executorMetadata)) return null;
+    let list: unknown[] | null = null;
+    for (const e of reply.executorMetadata) {
+      if (isObj(e) && isObj(e.loadedCustomizations) && Array.isArray(e.loadedCustomizations.customizations)) {
+        list = e.loadedCustomizations.customizations;
+      }
+    }
+    if (!list) return null;
+    const out: RuleFile[] = [];
+    const seen = new Set<string>();
+    for (const c of list) {
+      if (!isObj(c) || c.type !== 'REFRESH_CUSTOMIZATION_TYPE_RULE' || c.status !== 'STATUS_ENABLED') continue;
+      if (typeof c.path !== 'string' || !c.path.startsWith('/') || seen.has(c.path)) continue;
+      seen.add(c.path);
+      const scope = typeof c.scope === 'string' ? c.scope.replace(/^SCOPE_/, '').toLowerCase() : 'unknown';
+      out.push({ path: c.path, scope });
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** Index of the transcript's last planner step (a step carrying token usage). */

@@ -7,6 +7,7 @@ export const ALLOWED_METHODS: readonly string[] = Object.freeze([
   'GetCascadeTrajectoryGeneratorMetadata',
   'GetAllCascadeTrajectories',
   'GetTokenBase',
+  'GetCascadeTrajectoryExecutorMetadatas',
 ]);
 
 export const SERVICE_PATH = '/exa.language_server_pb.LanguageServerService/';

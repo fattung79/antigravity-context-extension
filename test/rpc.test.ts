@@ -7,7 +7,7 @@ import {
 } from '../src/sources/rpc/processTable';
 import { Puller } from '../src/sources/rpc/puller';
 import { Recovery, recoveryDelay } from '../src/sources/rpc/recovery';
-import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata, tokenBaseChildren } from '../src/sources/rpc/reply';
+import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata, parseRuleFiles, tokenBaseChildren } from '../src/sources/rpc/reply';
 import { StaleGuard } from '../src/sources/rpc/staleGuard';
 
 /** Fake clock: advance() runs due timers in order and lets promise continuations settle. */
@@ -48,7 +48,7 @@ describe('allowlist', () => {
   const server = new ServerHandle(1, 4000, TOKEN);
 
   it('is exactly the three read-only methods', () => {
-    expect([...ALLOWED_METHODS].sort()).toEqual(['GetAllCascadeTrajectories', 'GetCascadeTrajectoryGeneratorMetadata', 'GetTokenBase']);
+    expect([...ALLOWED_METHODS].sort()).toEqual(['GetAllCascadeTrajectories', 'GetCascadeTrajectoryExecutorMetadatas', 'GetCascadeTrajectoryGeneratorMetadata', 'GetTokenBase']);
   });
 
   it.each(['GetUserStatus', 'SendUserCascadeMessage', 'CancelCascadeInvocation', 'getTokenBase', 'GetTokenBase/../X', ''])(
@@ -253,6 +253,56 @@ describe('reply -> Snapshot', () => {
     expect(tokenBaseChildren(100, kids)).toEqual(kids);
     expect(tokenBaseChildren(120, kids)).toBeNull();
     expect(tokenBaseChildren(0, [])).toBeNull();
+  });
+});
+
+describe('lastExecutionId', () => {
+  it('is the executionId of the last entry that has one, else null', () => {
+    const reply = JSON.parse(readFileSync(new URL('./fixtures/generator-metadata-reply.json', import.meta.url), 'utf8'));
+    expect(parseGeneratorMetadata(structuredClone(reply))!.lastExecutionId).toBe('00000000-0000-0000-0000-000000000003');
+    const r = structuredClone(reply);
+    delete r.generatorMetadata[r.generatorMetadata.length - 1].executionId;
+    expect(parseGeneratorMetadata(r)!.lastExecutionId).toBe('00000000-0000-0000-0000-000000000002');
+    for (const e of r.generatorMetadata) delete e.executionId;
+    expect(parseGeneratorMetadata(r)!.lastExecutionId).toBeNull();
+  });
+});
+
+describe('parseRuleFiles', () => {
+  const R = 'REFRESH_CUSTOMIZATION_TYPE_RULE';
+  const mk = (...customizations: unknown[]) => ({ executorMetadata: [{ loadedCustomizations: { customizations } }] });
+  const rule = (path: unknown, extra: Record<string, unknown> = {}) => ({ type: R, path, scope: 'SCOPE_WORKSPACE', status: 'STATUS_ENABLED', ...extra });
+
+  it('keeps enabled absolute RULE files with lower-cased scope', () => {
+    const r = parseRuleFiles(mk(
+      rule('/home/u/proj/AGENTS.md'),
+      rule('/home/u/.gemini/AGENTS.md', { scope: 'SCOPE_GLOBAL' }),
+      { type: 'REFRESH_CUSTOMIZATION_TYPE_SKILL', name: 'x', path: '/a/SKILL.md', scope: 'SCOPE_BUILTIN', status: 'STATUS_ENABLED' },
+      { type: 'REFRESH_CUSTOMIZATION_TYPE_AGENT', name: 'research', scope: 'SCOPE_BUILTIN', status: 'STATUS_ENABLED' },
+    ));
+    expect(r).toEqual([
+      { path: '/home/u/proj/AGENTS.md', scope: 'workspace' },
+      { path: '/home/u/.gemini/AGENTS.md', scope: 'global' },
+    ]);
+  });
+  it('skips disabled and non-absolute, dedupes by path', () => {
+    expect(parseRuleFiles(mk(
+      rule('/a/x.md', { status: 'STATUS_DISABLED' }), rule('rel/x.md'), rule(5), rule('/a/y.md'), rule('/a/y.md'),
+    ))).toEqual([{ path: '/a/y.md', scope: 'workspace' }]);
+  });
+  it('uses the last entry that has loadedCustomizations', () => {
+    const r = { executorMetadata: [
+      { loadedCustomizations: { customizations: [rule('/old.md')] } },
+      { loadedCustomizations: { customizations: [rule('/new.md')] } },
+      { executionId: 'x' },
+    ] };
+    expect(parseRuleFiles(r)).toEqual([{ path: '/new.md', scope: 'workspace' }]);
+  });
+  it('null for unusable shapes, [] when no rules', () => {
+    for (const v of [{}, null, 'x', 5, { executorMetadata: 'x' }, { executorMetadata: [{}] }, { executorMetadata: [{ loadedCustomizations: { customizations: 'x' } }] }]) {
+      expect(parseRuleFiles(v)).toBeNull();
+    }
+    expect(parseRuleFiles(mk())).toEqual([]);
   });
 });
 
