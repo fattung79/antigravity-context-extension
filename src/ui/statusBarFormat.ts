@@ -1,4 +1,5 @@
 import type { Snapshot } from '../model';
+import { countdownText } from '../recent';
 import type { Threshold } from './classify';
 
 export function formatTokens(n: number): string {
@@ -12,13 +13,42 @@ export function formatTokens(n: number): string {
 export const EMPTY_LABEL = '◌ ctx —';
 export const EMPTY_TOOLTIP = 'No Conversation yet';
 
+/** Figures part of a label: `62% · 159k/256k~`, `124k / ?~`, `n/a`. */
+function figures(s: Pick<Snapshot, 'used' | 'limit' | 'source'>, withNumbers: boolean): string {
+  const tilde = s.source === 'file' ? '~' : '';
+  if (s.used === null) return 'n/a';
+  if (s.limit === null || s.limit <= 0) return `${formatTokens(s.used)} / ?${tilde}`;
+  const pct = Math.round((s.used / s.limit) * 100);
+  return withNumbers ? `${pct}% · ${formatTokens(s.used)}/${formatTokens(s.limit)}${tilde}` : `${pct}%`;
+}
+
 /** Status bar label for the single Active item (spec 7.1). Trailing `~` = file source. */
 export function formatLabel(s: Pick<Snapshot, 'used' | 'limit' | 'source'>): string {
-  const tilde = s.source === 'file' ? '~' : '';
-  if (s.used === null) return '◔ ctx n/a';
-  if (s.limit === null || s.limit <= 0) return `◔ ctx ${formatTokens(s.used)} / ?${tilde}`;
-  const pct = Math.round((s.used / s.limit) * 100);
-  return `◔ ctx ${pct}% · ${formatTokens(s.used)}/${formatTokens(s.limit)}${tilde}`;
+  return `◔ ctx ${figures(s, true)}`;
+}
+
+/** Title cut to ~10 chars at a word break, with `…` when anything was dropped. */
+export function cutTitle(title: string, max = 10): string {
+  const t = title.replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  let out = '';
+  for (const w of t.split(' ')) {
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > max) break;
+    out = next;
+  }
+  if (!out) out = t.slice(0, max);
+  return `${out}…`;
+}
+
+/** Label when several Conversations show: Active keeps numbers (`◔ Fix WSL… 62% · 159k/256k`). */
+export function formatActiveLabelMulti(s: Pick<Snapshot, 'title' | 'used' | 'limit' | 'source'>): string {
+  return `◔ ${cutTitle(s.title)} ${figures(s, true)}`;
+}
+
+/** Recent item: `◷ Refactor… 41%`. */
+export function formatRecentLabel(s: Pick<Snapshot, 'title' | 'used' | 'limit' | 'source'>): string {
+  return `◷ ${cutTitle(s.title)} ${figures(s, false)}`;
 }
 
 function esc(s: string): string {
@@ -44,10 +74,11 @@ export function compactionLines(s: Pick<Snapshot, 'compaction' | 'limit' | 'mode
 }
 
 /** Tooltip markdown (rendered untrusted). Only fields available in file mode. */
-export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold | null = null): string {
+export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold | null = null, now: number = Date.now()): string {
   const lines: string[] = [];
   if (s.notSelected) lines.push('**Not selected:** last viewed Conversation in this window', '');
   lines.push(`**${esc(s.title)}**`, '');
+  if (s.expiresAt !== undefined) lines.push(esc(countdownText(s.expiresAt - now)), '');
   lines.push(`Model: ${s.modelDisplay ? esc(s.modelDisplay) : 'unknown'}`);
   if (s.used === null) {
     lines.push('Used: n/a (no token counts in transcript)');

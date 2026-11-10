@@ -31,6 +31,9 @@ export class ContextInventoryProvider
   /** The Active Conversation root, if any (first root). */
   firstRoot(): RenderedItem | undefined { return this.roots[0]; }
 
+  /** A Conversation's root by id (Recent roots are siblings of the Active root). */
+  rootFor(id: string): RenderedItem | undefined { return this.roots.find((r) => r.id === id); }
+
   getParent(element: RenderedItem): RenderedItem | undefined {
     return element.parentId ? this.byId.get(element.parentId) : undefined;
   }
