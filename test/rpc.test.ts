@@ -163,6 +163,15 @@ describe('/proc candidate selection', () => {
 describe('reply -> Snapshot', () => {
   const reply = JSON.parse(readFileSync(new URL('./fixtures/generator-metadata-reply.json', import.meta.url), 'utf8'));
 
+  it('skips a trailing call whose usage has no token counts (aborted call, real data 16c7dd2b)', () => {
+    const r = structuredClone(reply);
+    const tail = structuredClone(r.generatorMetadata[r.generatorMetadata.length - 1]);
+    tail.chatModel.usage = { outputTokens: '5' };
+    r.generatorMetadata.push(tail);
+    const m = parseGeneratorMetadata(r)!;
+    expect(m.used).toBe(14000);
+  });
+
   it('extracts used, model, limit, estimate, breakdown, totals from the last usable entry', () => {
     const m = parseGeneratorMetadata(reply)!;
     expect(m.used).toBe(14000); // 2000 input + 12000 cache read (last call WITH usage)

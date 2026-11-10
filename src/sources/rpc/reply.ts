@@ -85,6 +85,8 @@ export function parseGeneratorMetadata(reply: unknown): RpcMeta | null {
     const usage = cm.usage;
     if (usage === undefined) continue; // call still in flight
     if (!isObj(usage)) return bad('usage');
+    // Aborted/cut-off calls carry a usage object without counts: not a figure (would read as 0).
+    if (usage.inputTokens === undefined && usage.cacheReadTokens === undefined) continue;
     const input = int(usage.inputTokens, 'inputTokens', 0)!;
     const cacheRead = int(usage.cacheReadTokens, 'cacheReadTokens', 0)!;
     const output = int(usage.outputTokens, 'outputTokens', 0)!;
