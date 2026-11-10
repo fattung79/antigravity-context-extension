@@ -16,8 +16,9 @@ export class StatusBar implements vscode.Disposable {
   private item(i: number): vscode.StatusBarItem {
     let it = this.items[i];
     if (!it) {
-      // Higher priority sits further left: Active (100) first, Recent follow with descending priority.
-      it = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100 - i);
+      // Higher priority sits further left: Active first. Fractional steps keep the items adjacent
+      // (integer steps let other extensions' items at 99, 98, ... land between them).
+      it = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100 - i * 0.001);
       it.name = i === 0 ? 'Context Viewer' : `Context Viewer (Recent ${i})`;
       this.items[i] = it;
     }
