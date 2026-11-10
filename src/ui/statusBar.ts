@@ -10,7 +10,7 @@ const BG: Partial<Record<Level, string>> = { amber: 'statusBarItem.warningBackgr
 export class StatusBar implements vscode.Disposable {
   private item: vscode.StatusBarItem | undefined;
 
-  constructor(private revealCommand: string, private config: () => Pick<Config, 'threshold' | 'thresholdDefault'>) {}
+  constructor(private revealCommand: string, private config: () => Pick<Config, 'thresholdPerModel' | 'threshold'>) {}
 
   private ensure(): vscode.StatusBarItem {
     if (!this.item) {

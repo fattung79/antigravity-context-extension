@@ -6,10 +6,10 @@ export interface Config {
   roots: string[];
   maxConversations: number;
   recentExpiryMinutes: number;
-  threshold: Record<string, number>;
-  thresholdDefault: number | null;
-  limits: Record<string, number>;
-  limitsDefault: number | null;
+  thresholdPerModel: Record<string, number>;
+  threshold: number | null;
+  contextWindowPerModel: Record<string, number>;
+  contextWindow: number | null;
   heavyItemPercent: number;
   hoverChars: number;
   logLevel: LogLevel;
@@ -30,7 +30,6 @@ function numMap(v: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   if (v && typeof v === 'object') {
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-      if (k === 'default') continue; // dotted key leaks in as a property
       if (typeof val === 'number' && Number.isFinite(val)) out[k] = val;
     }
   }
@@ -56,10 +55,10 @@ export function parseConfig(get: RawGetter, home?: string): Config {
     roots,
     maxConversations: typeof max === 'number' && max >= 1 ? Math.floor(max) : 3,
     recentExpiryMinutes: typeof exp === 'number' && exp >= 0 ? exp : 3,
-    threshold: numMap(get<unknown>('threshold', {})),
-    thresholdDefault: numOrNull(get<unknown>('threshold.default', 150), 150),
-    limits: numMap(get<unknown>('limits', {})),
-    limitsDefault: numOrNull(get<unknown>('limits.default', null), null),
+    thresholdPerModel: numMap(get<unknown>('thresholdPerModel', {})),
+    threshold: numOrNull(get<unknown>('threshold', 150), 150),
+    contextWindowPerModel: numMap(get<unknown>('contextWindowPerModel', {})),
+    contextWindow: numOrNull(get<unknown>('contextWindow', null), null),
     heavyItemPercent: typeof heavy === 'number' ? heavy : 5,
     hoverChars: typeof hover === 'number' ? hover : 2000,
     logLevel: level === 'off' || level === 'error' || level === 'info' || level === 'debug' ? level : 'error',

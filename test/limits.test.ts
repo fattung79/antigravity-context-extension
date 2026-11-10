@@ -25,11 +25,11 @@ describe('resolveLimit', () => {
 });
 
 describe('parseConfig', () => {
-  it('skips the dotted `default` property in per-model maps', () => {
-    const raw: Record<string, unknown> = { limits: { default: 5, 'A': 10 }, 'limits.default': 7 };
+  it('honours a model named `default` in per-model maps', () => {
+    const raw: Record<string, unknown> = { contextWindowPerModel: { default: 5, 'A': 10 }, contextWindow: 7 };
     const c = parseConfig(<T>(k: string, f: T) => (k in raw ? (raw[k] as T) : f), '/home/u');
-    expect(c.limits).toEqual({ A: 10 });
-    expect(c.limitsDefault).toBe(7);
+    expect(c.contextWindowPerModel).toEqual({ default: 5, A: 10 });
+    expect(c.contextWindow).toBe(7);
     expect(c.roots).toEqual(['/home/u/.gemini/antigravity/']);
   });
 });

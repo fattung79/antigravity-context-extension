@@ -89,7 +89,7 @@ export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold |
   if (threshold && s.used !== null) {
     const pct = Math.round((s.used / threshold.tokens) * 100);
     const src = threshold.source === 'default' || threshold.source === 'context window'
-      ? threshold.source : `\`threshold["${threshold.source.replace(/`/g, '')}"]\``;
+      ? threshold.source : `\`thresholdPerModel["${threshold.source.replace(/`/g, '')}"]\``;
     lines.push(`Threshold: ${pct}% of ${threshold.tokens.toLocaleString('en-US')} · ${src}`);
   }
   lines.push(`Limit source: ${s.limitSource}`);

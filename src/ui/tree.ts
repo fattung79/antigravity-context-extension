@@ -40,7 +40,7 @@ export class ContextInventoryProvider
 
   constructor(
     private store: Store,
-    private config: () => Pick<Config, 'threshold' | 'thresholdDefault'>,
+    private config: () => Pick<Config, 'thresholdPerModel' | 'threshold'>,
     private hover?: HoverDeps,
   ) {
     this.state = store.get();

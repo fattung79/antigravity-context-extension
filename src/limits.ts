@@ -15,11 +15,11 @@ export type LimitSource = 'override' | 'server' | 'database' | 'remembered' | 'b
 
 export interface LimitInputs {
   modelKey: string | null;
-  override: Record<string, number>;   // contextViewer.limits
+  override: Record<string, number>;   // contextViewer.contextWindowPerModel
   server?: number | null;             // live server maxContextTokens (slice 3)
   database: number | null;            // gen_metadata .1.9.10.4
   remembered?: Record<string, number>; // persisted limits seen earlier
-  defaultLimit: number | null;        // contextViewer.limits.default
+  defaultLimit: number | null;        // contextViewer.contextWindow
 }
 
 export interface ResolvedLimit {
