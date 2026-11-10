@@ -6,7 +6,7 @@ import { decodeGenMetadata, type GenMetadata } from './genMetadata';
 import { buildBreakdownGroups } from './breakdown';
 import { buildChatItems, computeBaseline, isHeavy } from './items';
 import { DbCopier, type OpenDb } from './sqlite';
-import { TranscriptParser } from './transcript';
+import { TranscriptParser, type KeptStep } from './transcript';
 
 export interface FileIo {
   /** Size in bytes, or null if missing. */
@@ -81,6 +81,12 @@ export class FileSource {
 
   constructor(readonly conversationId: string, readonly transcriptPath: string, readonly dbPath: string, private deps: FileSourceDeps) {
     this.copier = new DbCopier(deps.storageDir);
+  }
+
+  /** Re-read only the transcript (rpc mode: labels + stale check). Throws if it is missing. */
+  readSteps(): KeptStep[] {
+    readTranscript(this.parser, this.transcriptPath, this.deps.io);
+    return this.parser.kept;
   }
 
   /** Title fallback inputs from the transcript. */

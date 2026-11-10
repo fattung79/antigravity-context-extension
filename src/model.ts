@@ -26,6 +26,7 @@ export interface Snapshot {
   compaction: { count: number; manual: number; lastStep?: number; was?: number } | null;
   modelChanges: { step: number; from: string; to: string }[];
   startStepIndex: number | null;
+  truncationReason?: string | null; // rpc only; feeds Compaction (slice 6)
   notSelected: boolean; role: 'active' | 'recent'; expiresAt?: number;
 }
 
