@@ -25,21 +25,21 @@ export interface Threshold {
 export function lookupThreshold(
   modelKey: string | null,
   limit: number | null,
-  cfg: Pick<Config, 'threshold' | 'thresholdDefault'>,
+  cfg: Pick<Config, 'thresholdPerModel' | 'threshold'>,
 ): Threshold | null {
-  if (modelKey !== null && modelKey !== 'default' && Object.prototype.hasOwnProperty.call(cfg.threshold, modelKey)) {
-    const k = cfg.threshold[modelKey] ?? 0;
+  if (modelKey !== null && Object.prototype.hasOwnProperty.call(cfg.thresholdPerModel, modelKey)) {
+    const k = cfg.thresholdPerModel[modelKey] ?? 0;
     if (k > 0) return { tokens: k * 1000, source: modelKey };
   }
-  if (cfg.thresholdDefault !== null && cfg.thresholdDefault > 0) return { tokens: cfg.thresholdDefault * 1000, source: 'default' };
-  if (cfg.thresholdDefault === null && limit !== null && limit > 0) return { tokens: limit, source: 'context window' };
+  if (cfg.threshold !== null && cfg.threshold > 0) return { tokens: cfg.threshold * 1000, source: 'default' };
+  if (cfg.threshold === null && limit !== null && limit > 0) return { tokens: limit, source: 'context window' };
   return null;
 }
 
 /** Level for a Snapshot-like under the current settings. */
 export function levelFor(
   s: { used: number | null; limit: number | null; modelKey: string | null },
-  cfg: Pick<Config, 'threshold' | 'thresholdDefault'>,
+  cfg: Pick<Config, 'thresholdPerModel' | 'threshold'>,
 ): Level {
   return classify(s.used, lookupThreshold(s.modelKey, s.limit, cfg)?.tokens ?? null);
 }

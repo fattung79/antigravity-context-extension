@@ -42,7 +42,7 @@
           "type": "number",
           "minimum": 1,
           "default": 3,
-          "description": "Caps tree roots and status bar items, counting the Active Conversation."
+          "description": "Caps the Conversations shown in the tree, counting the Active Conversation. The status bar shows the Active Conversation only."
         },
         "contextViewer.recentExpiryMinutes": {
           "type": "number",
@@ -50,36 +50,44 @@
           "description": "A Recent Conversation is dropped this many minutes after it entered the Recent list."
         },
         "contextViewer.threshold": {
-          "type": "object",
-          "default": {},
-          "additionalProperties": {
-            "type": "number"
-          },
-          "markdownDescription": "Per-model Threshold in thousands of tokens (`190` = 190k), keyed by model name without the effort level."
-        },
-        "contextViewer.threshold.default": {
           "type": [
             "number",
             "null"
           ],
           "default": 150,
-          "markdownDescription": "Fallback Threshold in thousands. Cleared: the model's Context window is the Threshold."
+          "minimum": 1,
+          "maximum": 10000,
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `150` for 150,000, not `150000`.\n\nSets the traffic-light colour from the context **actually used**: 🟢 up to 50% of the Threshold, 🟡 above 50%, 🟠 above 80%, 🔴 above 100%. Independent of the model's Context window, so you can be warned well before the model's maximum. Applies to every model not listed in `#contextViewer.thresholdPerModel#`. Clear it to use each model's Context window as its Threshold."
         },
-        "contextViewer.limits": {
+        "contextViewer.thresholdPerModel": {
           "type": "object",
           "default": {},
           "additionalProperties": {
-            "type": "number"
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
           },
-          "markdownDescription": "Per-model Context window override in tokens, keyed by model name without the effort level."
+          "markdownDescription": "**Unit: thousands of tokens (k).** Threshold for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 190 }`. Sets the traffic-light colour like `#contextViewer.threshold#`, which applies to models not listed here."
         },
-        "contextViewer.limits.default": {
+        "contextViewer.contextWindow": {
           "type": [
             "number",
             "null"
           ],
           "default": null,
-          "description": "Last-resort Context window in tokens. Empty: no limit known."
+          "minimum": 1,
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `256` for 256,000, not `256000`.\n\nThe model's **maximum** context: the denominator of the status bar figures (`62% · 159k/256k`) and of the heavy-item %. Does not change the colours (see `#contextViewer.threshold#`). Last resort: used only when neither `#contextViewer.contextWindowPerModel#`, Antigravity, nor a built-in value knows the model's window. Empty: no limit known.",
+          "maximum": 10000
+        },
+        "contextViewer.contextWindowPerModel": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "markdownDescription": "**Unit: thousands of tokens (k).** The model's maximum context for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 256 }`. Takes precedence over what Antigravity reports. Does not change the colours."
         },
         "contextViewer.heavyItemPercent": {
           "type": "number",
@@ -100,7 +108,13 @@
             "debug"
           ],
           "default": "error",
-          "description": "Output channel verbosity."
+          "markdownDescription": "How much is written to the **Context Viewer** Output panel (View → Output). Display is unaffected. `off`: nothing. `error`: failures only. `info`: also data-source switches (`rpc` ↔ `file`, server found or lost). `debug`: also every poll hit and RPC call timing. Lines are redacted (tokens, emails, account fields).",
+          "enumDescriptions": [
+            "Nothing",
+            "Failures only",
+            "Failures + data-source switches",
+            "Everything, incl. each poll and RPC call"
+          ]
         }
       }
     },

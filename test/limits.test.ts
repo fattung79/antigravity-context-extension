@@ -25,11 +25,18 @@ describe('resolveLimit', () => {
 });
 
 describe('parseConfig', () => {
-  it('skips the dotted `default` property in per-model maps', () => {
-    const raw: Record<string, unknown> = { limits: { default: 5, 'A': 10 }, 'limits.default': 7 };
+  it('Context window settings are entered in k and resolved in tokens', () => {
+    const raw: Record<string, unknown> = { contextWindowPerModel: { 'Gemini 3.8 Flash': 256 }, contextWindow: 128 };
     const c = parseConfig(<T>(k: string, f: T) => (k in raw ? (raw[k] as T) : f), '/home/u');
-    expect(c.limits).toEqual({ A: 10 });
-    expect(c.limitsDefault).toBe(7);
+    expect(c.contextWindowPerModel).toEqual({ 'Gemini 3.8 Flash': 256000 });
+    expect(c.contextWindow).toBe(128000);
+    expect(parseConfig(<T>(_k: string, f: T) => f).contextWindow).toBeNull();
+  });
+  it('honours a model named `default` in per-model maps', () => {
+    const raw: Record<string, unknown> = { contextWindowPerModel: { default: 5, 'A': 10 }, contextWindow: 7 };
+    const c = parseConfig(<T>(k: string, f: T) => (k in raw ? (raw[k] as T) : f), '/home/u');
+    expect(c.contextWindowPerModel).toEqual({ default: 5000, A: 10000 });
+    expect(c.contextWindow).toBe(7000);
     expect(c.roots).toEqual(['/home/u/.gemini/antigravity/']);
   });
 });

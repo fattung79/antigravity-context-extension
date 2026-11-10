@@ -71,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!e.affectsConfiguration('contextViewer')) return;
         config = readConfig();
         logger.setLevel(config.logLevel);
-        if (e.affectsConfiguration('contextViewer.roots') || e.affectsConfiguration('contextViewer.limits')) controller.configChanged();
+        if (e.affectsConfiguration('contextViewer.roots') || e.affectsConfiguration('contextViewer.contextWindowPerModel') || e.affectsConfiguration('contextViewer.contextWindow')) controller.configChanged();
         else if (e.affectsConfiguration('contextViewer.maxConversations')) controller.rerank();
         // Threshold/colour settings: redraw only.
         statusBar.render(store.get());

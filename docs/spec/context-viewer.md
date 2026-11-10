@@ -25,22 +25,22 @@ Why: [Map](../../wayfinder/context-viewer/map.md), [What shape does the handoff 
 
 ## 2. Settings
 
-All under `contextViewer.*`, declared in `package.json` `contributes.configuration`. Thresholds are entered in thousands of tokens; limits in raw tokens.
+All under `contextViewer.*`, declared in `package.json` `contributes.configuration`. Threshold and Context window settings are all entered in thousands of tokens (k); `config` converts Context window values to tokens.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
 | `roots` | string[] | `["~/.gemini/antigravity/"]` | Data roots to scan (each has `brain/`, `conversations/`, `annotations/`, `conversation_summaries.db`). `~` expanded. Change => rescan Conversations. |
-| `maxConversations` | number (>=1) | `3` | Caps tree roots and status bar items, counting the Active Conversation. Recent = max - 1. Change => re-rank Recent. |
+| `maxConversations` | number (>=1) | `3` | Caps tree roots, counting the Active Conversation (the status bar shows Active only). Recent = max - 1. Change => re-rank Recent. |
 | `recentExpiryMinutes` | number | `3` | A Recent Conversation is dropped this many minutes after it entered the Recent list. |
-| `threshold` | object `{ "<model key>": number }` | `{}` | Per-model Threshold, in thousands (`190` = 190k). Model key as in section 5. |
-| `threshold.default` | number or null | `150` | Fallback Threshold in thousands. Cleared (null) => the model's Context window is the Threshold. |
-| `limits` | object `{ "<model key>": number }` | `{}` | Per-model Context window override (tokens). Highest priority in section 5. |
-| `limits.default` | number or null | `null` | Last-resort Context window (tokens). Empty => no limit known. |
+| `threshold` | number or null (1–10000) | `150` | Threshold in **thousands** for models not in `thresholdPerModel`. Sets the colours from context actually used, independent of the Context window. Cleared (null) => the model's Context window is the Threshold. |
+| `thresholdPerModel` | object `{ "<model key>": number }` | `{}` | Per-model Threshold in **thousands** (`190` = 190k). Model key as in section 5. |
+| `contextWindow` | number or null (1–10000) | `null` | Last-resort Context window in **thousands** (`256` = 256k). The model's maximum: denominator of the figures and heavy-item %; never changes the colours. Empty => no limit known. |
+| `contextWindowPerModel` | object `{ "<model key>": number }` | `{}` | Per-model Context window override in **thousands**. Highest priority in section 5. |
 | `heavyItemPercent` | number | `5` | Chat Messages items above this % of the Context window are highlighted (error colour). |
 | `hoverChars` | number | `2000` | Hover cut-off for chat item text: head = 75%, tail = 25%; thinking budget = 50%. |
-| `logLevel` | `off`/`error`/`info`/`debug` | `error` | Output channel verbosity; applied immediately. |
+| `logLevel` | `off`/`error`/`info`/`debug` | `error` | Output channel verbosity; applied immediately. `error`: failures; `info`: + data-source switches; `debug`: + each poll hit and RPC call timing. |
 
-`threshold.default` and `limits.default` are dotted keys, so VS Code also returns them as the `default` property of `get('threshold')` / `get('limits')`; skip the `default` property when reading per-model entries (no model key is `default`).
+Each fallback and its per-model map are separate keys (no dotted `.default` keys: VS Code nests those inside the map, which showed a confusing `default` entry). Units are stated first in each setting's description; the min/max bounds make the Settings UI flag a value entered in the wrong unit.
 
 Settings reactions: threshold/colour/`heavyItemPercent`/`hoverChars` => redraw only; `roots` => rescan; `maxConversations` => re-rank Recent; `logLevel` => apply now. No other settings (poll intervals are constants, section 6).
 
@@ -76,7 +76,7 @@ First non-empty of: `conversation_summaries.title` > `.preview` > first user pro
 - Candidates: any workspace. Rank key = later of (last seen = `annotations` `last_user_view_time`) and (last written = `conversation_summaries.last_modified_time`).
 - Every 5 s: re-read only `annotations/*.pbtxt` whose mtime changed, plus `conversation_summaries.db` (titles, last-written).
 - Take the top `maxConversations - 1`, excluding the Active one.
-- Each Recent Conversation has a timer of `recentExpiryMinutes` held in the store, starting when it enters the list. Expiry removes its tree root and status bar item together. When the last Recent drops, the status bar returns to the single Active item with its full label.
+- Each Recent Conversation has a timer of `recentExpiryMinutes` held in the store, starting when it enters the list. Expiry removes its tree root. The status bar is unaffected: it shows only the Active Conversation.
 - Countdown text: minutes only (`drops in 3m`, then `<1m`); redraws every 15 s; shown in the tree root description, and only in the tooltip on the status bar.
 
 Why: [Can the extension detect which Conversation is selected?](../../wayfinder/context-viewer/01-selection-signal.md), [Does switching Conversations update the selection signals as expected?](../../wayfinder/context-viewer/10-selection-click-test.md), [With several windows open, which Conversation is Active?](../../wayfinder/context-viewer/11-multi-window-active.md), [Which .gemini data store is the best source for titles, model and tokens?](../../wayfinder/context-viewer/09-gemini-data-stores.md), [Which brain root and data folder does the current IDE write to?](../../wayfinder/context-viewer/08-active-brain-root.md); research: [selection-signal](../research/selection-signal.md), [selection-click-test](../research/selection-click-test.md), [gemini-data-stores](../research/gemini-data-stores.md).
@@ -139,12 +139,12 @@ Why: [What can the language server's RPC tell us, and can we reach it reliably?]
 
 Module `limits`. The Context window per model, first match wins:
 
-1. `contextViewer.limits["<model key>"]` (user override)
+1. `contextViewer.contextWindowPerModel["<model key>"]` (user override)
 2. live server `maxContextTokens`
 3. Conversation database `.1.9.10.4`
 4. remembered limits (extension `globalState`, key per model; every limit seen from 2 or 3 is saved)
 5. built-in table: `Gemini 3.8 Flash` = 256000, `Gemini 4 Argon` = 256000 (confirmed values only; no guesses for Claude or GPT-OSS)
-6. `contextViewer.limits.default` (empty by default)
+6. `contextViewer.contextWindow` (empty by default)
 
 - **Model key** = display name without the effort level in brackets: `Gemini 3.8 Flash (Medium)` => `Gemini 3.8 Flash`. Convert every source to it.
 - No limit from anywhere: status bar `ctx 124k / ?`, no percentage; tooltip says limit unknown.
@@ -195,34 +195,35 @@ One poller comparing (mtime, size):
 Unfocused = 5x slower, catches up at once on focus. Every poller and timer stops on deactivate. `fs.watch` is not used anywhere (it does not fire on `/mnt/c`).
 
 ### 6.5 Lifecycle
-Activate on `onStartupFinished`. Deactivation disposes the poller, timers, and status bar items.
+Activate on `onStartupFinished`. Deactivation disposes the poller, timers, and the status bar item.
 
 Why: [How do the data sources, watching, parsing and UI fit together?](../../wayfinder/context-viewer/15-architecture.md), [Where does the extension run under WSL, and what can it reach?](../../wayfinder/context-viewer/04-extension-host-wsl.md); research: [extension-host-wsl](../research/extension-host-wsl.md).
 
 ## 7. Views
 
 ### 7.1 Status bar (`ui/statusBar`)
-- Right-aligned (`StatusBarAlignment.Right`, priority 100; Recent items follow it with descending priority). Only the Active Conversation: one item, `◔ ctx 62% · 159k/256k`. No limit: `◔ ctx 124k / ?`. File mode: trailing `~` (`◔ ctx 62% · 159k/256k~`). Used `n/a`: `◔ ctx n/a`.
-- With Recent Conversations: one item per Conversation (Active first, left to right), title cut to ~10 chars at a word break with `…`: `◔ Fix WSL… 62% · 159k/256k`, `◷ Refactor… 41%`, `◷ Can you… 16%`. Only the Active item keeps the numbers; Recent show `◷` and the percentage.
+- Right-aligned (`StatusBarAlignment.Right`, priority 100). One item, always the Active Conversation; Recent Conversations show only in the tree. Label = level dot, title cut to ~18 chars at a word break with `…`, then the figures: `🟡 Fix WSL path… · 62% · 159k/256k`. No limit: `🟢 Fix WSL path… · 124k / ?`. File mode: trailing `~` (`… · 62% · 159k/256k~`). Used `n/a`: `⚪ Fix WSL path… · n/a`. `$(` in a title is escaped so it never renders as an icon.
 - Percentage = used ÷ limit, rounded; may exceed 100% after Compaction (`110% · 282k/256k`).
 - Click => reveal that Conversation's root in the tree (command focuses the view and reveals the item).
-- Hover = that Conversation's tooltip (below). Expiry removes the item together with the tree root.
+- Hover = the Active Conversation's tooltip (below).
 - Empty: `◌ ctx —`, tooltip "No Conversation yet".
-- Not selected: muted text colour (theme disabled foreground), tooltip first line "Not selected: last viewed Conversation in this window".
+- Not selected: muted text colour (theme disabled foreground) unless an amber/red background applies, tooltip first line "Not selected: last viewed Conversation in this window".
 
-**Tooltip** (trusted-off Markdown): title; model (display name, with effort level); `used / limit`; Antigravity's estimate (labelled `Antigravity estimate`); Threshold row `40% of 190,000 · threshold["Gemini 3.8 Flash"]` (shows `default` when the default applies; omitted if no Threshold); limit source; data source (`rpc`/`file`); running totals (input, cache read, output, calls); Compaction lines (section 8).
+**Tooltip** (trusted-off Markdown): title; model (display name, with effort level); `used / limit`; Antigravity's estimate (labelled `Antigravity estimate`); Threshold row `40% of 190,000 · thresholdPerModel["Gemini 3.8 Flash"]` (shows `default` when the default applies; omitted if no Threshold); limit source; data source (`rpc`/`file`); running totals (input, cache read, output, calls); Compaction lines (section 8).
 
-**Colour** = `used ÷ Threshold` per status bar item and per Conversation root icon, via pure `classify`:
+**Colour** = `used ÷ Threshold` for the status bar item and per Conversation root icon, via pure `classify`:
 
 | Ratio | Status bar | Tree icon |
 |---|---|---|
-| <= 50% | green text (healthy) | no tint |
-| > 50% | yellow text (`StatusBarItem.color`) | yellow tint |
-| > 80% | amber (`statusBarItem.warningBackground`) | amber tint |
-| > 100% | red (`statusBarItem.errorBackground`) | red tint |
-| no Threshold | no colour at all (not even green) | no tint |
+| <= 50% | 🟢 dot | no tint |
+| > 50% | 🟡 dot | yellow tint |
+| > 80% | 🟠 dot + amber (`statusBarItem.warningBackground`) | amber tint |
+| > 100% | 🔴 dot + red (`statusBarItem.errorBackground`) | red tint |
+| no Threshold | ⚪ dot, no background | no tint |
 
-Threshold lookup: `threshold["<model key>"]` > `threshold.default` (150) > the model's Context window if default cleared > none. The `notSelected` dim overrides green.
+The status bar text keeps the theme's foreground: coloured text on the status bar background was hard to read (QC, about 2.4:1 contrast for green on the default blue). The dot carries the level.
+
+Threshold lookup: `thresholdPerModel["<model key>"]` > `threshold` (150) > the model's Context window if `threshold` is cleared > none. The `notSelected` dim applies when there is no background.
 
 ### 7.2 Tree (`ui/tree`)
 - One view, **Context Inventory**, in its own activity-bar container. Each Conversation is a root: Active first, expanded; Recent after, collapsed; cap `maxConversations`.
