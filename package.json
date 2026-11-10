@@ -42,7 +42,7 @@
           "type": "number",
           "minimum": 1,
           "default": 3,
-          "description": "Caps tree roots and status bar items, counting the Active Conversation."
+          "description": "Caps the Conversations shown in the tree, counting the Active Conversation. The status bar shows the Active Conversation only."
         },
         "contextViewer.recentExpiryMinutes": {
           "type": "number",
@@ -53,9 +53,11 @@
           "type": "object",
           "default": {},
           "additionalProperties": {
-            "type": "number"
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
           },
-          "markdownDescription": "Per-model Threshold in thousands of tokens (`190` = 190k), keyed by model name without the effort level."
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `190` for 190,000, not `190000`. Per-model Threshold, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 190 }`."
         },
         "contextViewer.threshold.default": {
           "type": [
@@ -63,15 +65,18 @@
             "null"
           ],
           "default": 150,
-          "markdownDescription": "Fallback Threshold in thousands. Cleared: the model's Context window is the Threshold."
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `150` for 150,000, not `150000`. Fallback Threshold that drives the colours. Clear it to use the model's Context window as the Threshold.",
+          "minimum": 1,
+          "maximum": 10000
         },
         "contextViewer.limits": {
           "type": "object",
           "default": {},
           "additionalProperties": {
-            "type": "number"
+            "type": "number",
+            "minimum": 1000
           },
-          "markdownDescription": "Per-model Context window override in tokens, keyed by model name without the effort level."
+          "markdownDescription": "**Unit: tokens (not k).** Enter `256000`, not `256`. Per-model Context window override, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 256000 }`."
         },
         "contextViewer.limits.default": {
           "type": [
@@ -79,7 +84,8 @@
             "null"
           ],
           "default": null,
-          "description": "Last-resort Context window in tokens. Empty: no limit known."
+          "markdownDescription": "**Unit: tokens (not k).** Enter `256000`, not `256`. Last-resort Context window when no other source knows the model's. Empty: no limit known.",
+          "minimum": 1000
         },
         "contextViewer.heavyItemPercent": {
           "type": "number",

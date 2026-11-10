@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Store, type Snapshot } from '../src/model';
 import { AnnotationReader, countdownText, parseAnnotation, rankRecent } from '../src/recent';
 import type { Clock } from '../src/sources/rpc/clock';
-import { cutTitle, formatActiveLabelMulti, formatRecentLabel, formatTooltip } from '../src/ui/statusBarFormat';
+import { cutTitle, formatTooltip, statusBarSnapshot } from '../src/ui/statusBarFormat';
 import { buildConversationDescription } from '../src/ui/treeModel';
 
 class FakeClock implements Clock {
@@ -128,9 +128,20 @@ describe('status bar labels', () => {
     expect(cutTitle('1234567890')).toBe('1234567890');
     expect(cutTitle('Supercalifragilistic')).toBe('Supercalif…');
   });
-  it('Recent shows glyph + percentage only; Active keeps numbers', () => {
-    expect(formatRecentLabel({ title: 'Refactor the auth module', used: 41000, limit: 100000, source: 'rpc' })).toBe('◷ Refactor… 41%');
-    expect(formatActiveLabelMulti({ title: 'Fix WSL path bug', used: 159000, limit: 256000, source: 'rpc' })).toBe('◔ Fix WSL… 62% · 159k/256k');
+});
+
+describe('status bar shows the Active Conversation only', () => {
+  it('ignores Recent Conversations', () => {
+    const active = snap('a', 'active');
+    expect(statusBarSnapshot([active, snap('b', 'recent'), snap('c', 'recent')])).toBe(active);
+  });
+  it('finds Active even when it is not first', () => {
+    const active = snap('a', 'active');
+    expect(statusBarSnapshot([snap('b', 'recent'), active])).toBe(active);
+  });
+  it('no Active: nothing to show (empty label)', () => {
+    expect(statusBarSnapshot([snap('b', 'recent')])).toBeNull();
+    expect(statusBarSnapshot([])).toBeNull();
   });
 });
 

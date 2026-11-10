@@ -1,6 +1,6 @@
 import type { Snapshot } from '../model';
 import { countdownText } from '../recent';
-import type { Threshold } from './classify';
+import type { Level, Threshold } from './classify';
 
 export function formatTokens(n: number): string {
   if (n >= 1000) {
@@ -13,18 +13,13 @@ export function formatTokens(n: number): string {
 export const EMPTY_LABEL = '◌ ctx —';
 export const EMPTY_TOOLTIP = 'No Conversation yet';
 
-/** Figures part of a label: `62% · 159k/256k~`, `124k / ?~`, `n/a`. */
-function figures(s: Pick<Snapshot, 'used' | 'limit' | 'source'>, withNumbers: boolean): string {
+/** Figures part of the label: `62% · 159k/256k~`, `124k / ?~`, `n/a`. */
+function figures(s: Pick<Snapshot, 'used' | 'limit' | 'source'>): string {
   const tilde = s.source === 'file' ? '~' : '';
   if (s.used === null) return 'n/a';
   if (s.limit === null || s.limit <= 0) return `${formatTokens(s.used)} / ?${tilde}`;
   const pct = Math.round((s.used / s.limit) * 100);
-  return withNumbers ? `${pct}% · ${formatTokens(s.used)}/${formatTokens(s.limit)}${tilde}` : `${pct}%`;
-}
-
-/** Status bar label for the single Active item (spec 7.1). Trailing `~` = file source. */
-export function formatLabel(s: Pick<Snapshot, 'used' | 'limit' | 'source'>): string {
-  return `◔ ctx ${figures(s, true)}`;
+  return `${pct}% · ${formatTokens(s.used)}/${formatTokens(s.limit)}${tilde}`;
 }
 
 /** Title cut to ~10 chars at a word break, with `…` when anything was dropped. */
@@ -41,14 +36,19 @@ export function cutTitle(title: string, max = 10): string {
   return `${out}…`;
 }
 
-/** Label when several Conversations show: Active keeps numbers (`◔ Fix WSL… 62% · 159k/256k`). */
-export function formatActiveLabelMulti(s: Pick<Snapshot, 'title' | 'used' | 'limit' | 'source'>): string {
-  return `◔ ${cutTitle(s.title)} ${figures(s, true)}`;
+/** Traffic-light dot carries the level, so the label text keeps the theme colour (spec 7.1). */
+export const LEVEL_DOT: Readonly<Record<Level, string>> = { healthy: '🟢', warn: '🟡', amber: '🟠', red: '🔴', none: '⚪' };
+
+/** Status bar label: `🟡 Fix WSL path… · 62% · 159k/256k`. Trailing `~` = file source. */
+export function formatLabel(s: Pick<Snapshot, 'title' | 'used' | 'limit' | 'source'>, level: Level): string {
+  // Status bar text renders `$(name)` as an icon; escape it like vscode's escapeIcons.
+  const title = cutTitle(s.title, 18).replace(/\$\(/g, '\\$(');
+  return `${LEVEL_DOT[level]} ${title} · ${figures(s)}`;
 }
 
-/** Recent item: `◷ Refactor… 41%`. */
-export function formatRecentLabel(s: Pick<Snapshot, 'title' | 'used' | 'limit' | 'source'>): string {
-  return `◷ ${cutTitle(s.title)} ${figures(s, false)}`;
+/** The one Conversation the status bar shows: the Active one, never a Recent (spec 7.1). */
+export function statusBarSnapshot<T extends Pick<Snapshot, 'role'>>(snaps: readonly T[]): T | null {
+  return snaps.find((s) => s.role === 'active') ?? null;
 }
 
 function esc(s: string): string {

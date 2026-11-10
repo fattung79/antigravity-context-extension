@@ -23,12 +23,12 @@ Then in Antigravity / VS Code: Extensions -> `...` -> Install from VSIX, or `ant
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `contextViewer.roots` | `["~/.gemini/antigravity/"]` | Data roots to scan |
-| `contextViewer.maxConversations` | 3 | Tree roots / status bar items cap |
+| `contextViewer.maxConversations` | 3 | Tree roots cap (status bar: Active only) |
 | `contextViewer.recentExpiryMinutes` | 3 | Minutes before a Recent Conversation drops |
-| `contextViewer.threshold` | `{}` | Per-model Threshold (thousands of tokens) |
-| `contextViewer.threshold.default` | 150 | Fallback Threshold (thousands) |
-| `contextViewer.limits` | `{}` | Per-model Context window override (tokens) |
-| `contextViewer.limits.default` | empty | Last-resort Context window |
+| `contextViewer.threshold` | `{}` | Per-model Threshold, **in k** (`190` = 190,000) |
+| `contextViewer.threshold.default` | 150 | Fallback Threshold, **in k** (`150` = 150,000) |
+| `contextViewer.limits` | `{}` | Per-model Context window override, **in tokens** (`256000`) |
+| `contextViewer.limits.default` | empty | Last-resort Context window, **in tokens** (`256000`) |
 | `contextViewer.heavyItemPercent` | 5 | Highlight chat items above this % of the window |
 | `contextViewer.hoverChars` | 2000 | Hover cut-off (head 75%, tail 25%) |
 | `contextViewer.logLevel` | `error` | `off` / `error` / `info` / `debug` (applies immediately) |
