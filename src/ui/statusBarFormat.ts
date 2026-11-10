@@ -1,4 +1,5 @@
 import type { Snapshot } from '../model';
+import type { Threshold } from './classify';
 
 export function formatTokens(n: number): string {
   if (n >= 1000) {
@@ -25,7 +26,7 @@ function esc(s: string): string {
 }
 
 /** Tooltip markdown (rendered untrusted). Only fields available in file mode. */
-export function formatTooltip(s: Snapshot, stale = false): string {
+export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold | null = null): string {
   const lines: string[] = [];
   if (s.notSelected) lines.push('**Not selected:** last viewed Conversation in this window', '');
   lines.push(`**${esc(s.title)}**`, '');
@@ -36,6 +37,12 @@ export function formatTooltip(s: Snapshot, stale = false): string {
     lines.push(`Used / limit: ${s.used.toLocaleString('en-US')} / ${s.limit !== null ? s.limit.toLocaleString('en-US') : 'unknown (limit unknown)'}`);
   }
   if (s.estimate !== null) lines.push(`Antigravity estimate: ${s.estimate.toLocaleString('en-US')}`);
+  if (threshold && s.used !== null) {
+    const pct = Math.round((s.used / threshold.tokens) * 100);
+    const src = threshold.source === 'default' || threshold.source === 'context window'
+      ? threshold.source : `\`threshold["${threshold.source.replace(/`/g, '')}"]\``;
+    lines.push(`Threshold: ${pct}% of ${threshold.tokens.toLocaleString('en-US')} · ${src}`);
+  }
   lines.push(`Limit source: ${s.limitSource}`);
   lines.push(`Data source: ${s.source}`);
   const t = s.totals;
