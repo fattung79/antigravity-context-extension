@@ -6,6 +6,9 @@ const RANK: Record<LogLevel, number> = { off: 0, error: 1, info: 2, debug: 3 };
 const CSRF_SHAPE = /(csrf[_-]?token(?:["']?\s*[=:]\s*["']?))[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}/gi;
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
+// Account-like fields (name, email, plan, tier) as key=value / "key": "value" pairs.
+const ACCOUNT_FIELD = /((?:user|account)[_-]?name|e-?mail|plan(?:[_-]?(?:name|type|tier))?|tier)("?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}&]+)/gi;
+
 let knownToken: string | undefined;
 
 /** Register this window's live CSRF token (memory only) so it is masked verbatim. */
@@ -18,6 +21,7 @@ export function redact(line: string, token: string | undefined = knownToken): st
   if (token) out = out.split(token).join('‹redacted›');
   out = out.replace(CSRF_SHAPE, '$1‹redacted›');
   out = out.replace(EMAIL, '‹redacted›');
+  out = out.replace(ACCOUNT_FIELD, '$1$2‹redacted›');
   return out;
 }
 

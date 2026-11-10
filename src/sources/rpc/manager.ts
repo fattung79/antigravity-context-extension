@@ -27,7 +27,11 @@ export class RpcManager {
 
   constructor(private d: RpcManagerDeps) {
     this.clock = d.clock ?? realClock;
-    this.recovery = new Recovery(this.clock, () => this.lookup(), () => {
+    this.recovery = new Recovery(this.clock, () => {
+      const ok = this.lookup();
+      if (!ok) this.d.info('rpc: server lookup failed, will retry');
+      return ok;
+    }, () => {
       this.d.info('rpc: server found again, switching to rpc');
       this.d.onRecovered();
     });
@@ -42,7 +46,7 @@ export class RpcManager {
       found = selectServer(this.d.procs.list(), {
         hostPid: this.d.hostPid, hostPpid: this.d.hostPpid, workspaceFolders: this.d.workspaceFolders(),
       });
-    } catch { found = null; }
+    } catch (e) { found = null; this.d.info(`rpc: process lookup failed: ${(e as Error).message}`); }
     if (found && avoid && found.sameAs(avoid)) found = null; // same stale server again
     if (!found) {
       this.server = null;

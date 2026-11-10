@@ -20,6 +20,21 @@ describe('redact', () => {
   });
 });
 
+describe('redact account fields', () => {
+  it('masks name/email/plan pairs', () => {
+    expect(redact('account_name: bob', undefined)).toBe('account_name: ‹redacted›');
+    expect(redact('planTier=ultra', undefined)).toBe('planTier=‹redacted›');
+    expect(redact('{"plan": "Pro Plus"}', undefined)).toBe('{"plan": ‹redacted›}');
+    expect(redact('email=a@b.co', undefined)).toBe('email=‹redacted›');
+  });
+  it('keeps unrelated words', () => {
+    expect(redact('explanation: fine, planning ahead', undefined)).toBe('explanation: fine, planning ahead');
+  });
+  it('masks the token anywhere, repeatedly', () => {
+    expect(redact(`${TOKEN} ${TOKEN}`, TOKEN)).toBe('‹redacted› ‹redacted›');
+  });
+});
+
 describe('Logger', () => {
   it('honours the level and redacts every line', () => {
     const lines: string[] = [];
