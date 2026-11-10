@@ -64,15 +64,16 @@ export function activate(context: vscode.ExtensionContext): void {
         config = readConfig();
         logger.setLevel(config.logLevel);
         if (e.affectsConfiguration('contextViewer.roots') || e.affectsConfiguration('contextViewer.limits')) controller.configChanged();
+        else if (e.affectsConfiguration('contextViewer.maxConversations')) controller.rerank();
         // Threshold/colour settings: redraw only.
         statusBar.render(store.get());
         provider.refresh();
         decorations.refresh();
       }),
       vscode.commands.registerCommand('contextViewer.refresh', () => controller.refresh()),
-      vscode.commands.registerCommand('contextViewer.reveal', async () => {
+      vscode.commands.registerCommand('contextViewer.reveal', async (conversationId?: unknown) => {
         await vscode.commands.executeCommand('contextViewer.inventory.focus');
-        const root = provider.firstRoot();
+        const root = (typeof conversationId === 'string' ? provider.rootFor(conversationId) : undefined) ?? provider.firstRoot();
         if (root) {
           try { await treeView.reveal(root, { select: false, focus: true, expand: true }); } catch { /* view not ready */ }
         }
@@ -80,7 +81,7 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.registerCommand('contextViewer.toggleLargestFirst', () => setLargestFirst(provider.toggleLargestFirst())),
       vscode.commands.registerCommand('contextViewer.toggleLargestFirst.active', () => setLargestFirst(provider.toggleLargestFirst())),
       vscode.commands.registerCommand('contextViewer.collapseAll', () => vscode.commands.executeCommand('workbench.actions.treeView.contextViewer.inventory.collapseAll')),
-      { dispose: () => controller.dispose() },
+      { dispose: () => { controller.dispose(); store.dispose(); } },
     );
     controller.setFocused(vscode.window.state.focused);
     controller.start();

@@ -6,7 +6,7 @@ import {
 } from './discovery';
 import type { RememberedLimits } from './limits';
 import type { Logger } from './logger';
-import type { Store } from './model';
+import type { Snapshot, Store } from './model';
 import { INTERVALS_MS, Poller, sameStat, statKey, type StatKey, type Task } from './poller';
 import { FileSource } from './sources/file';
 import { RpcError } from './sources/rpc/client';
@@ -17,6 +17,18 @@ import { Puller } from './sources/rpc/puller';
 import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata } from './sources/rpc/reply';
 import { StaleGuard } from './sources/rpc/staleGuard';
 import { DbCopier, type OpenDb } from './sources/sqlite';
+import { AnnotationReader, rankRecent } from './recent';
+
+type FileKey = { t: StatKey | null; d: StatKey | null; w: StatKey | null; title: string; ns: boolean; role: 'active' | 'recent' };
+
+/** Per tracked Conversation (Active or Recent): own FileSource, change key and stale guard. */
+interface Track {
+  source: FileSource | null;
+  fileStat: FileKey | null;
+  lastKey: FileKey | null;
+  force: boolean;
+  guard: StaleGuard;
+}
 
 export interface ControllerDeps {
   store: Store;
@@ -54,15 +66,13 @@ export class Controller {
   private selectionStat: { db: StatKey | null; wal: StatKey | null } | null = null;
   private activeId: string | null = null;
   private notSelected = false;
-  private source: FileSource | null = null;
-  private fileStat: { t: StatKey | null; d: StatKey | null; w: StatKey | null; title: string; ns: boolean } | null = null;
-  private forceNext = false;
+  private tracks = new Map<string, Track>();
+  private annotations = new AnnotationReader();
+  private views = new Map<string, number>();
   private rpc: RpcManager | null = null;
   private puller: Puller | null = null;
   /** Conversations the server could not answer for: file source until Refresh. */
   private fileOnly = new Set<string>();
-  private guard = new StaleGuard(2);
-  private lastKey: Controller['fileStat'] = null;
 
   constructor(private deps: ControllerDeps) {
     this.copier = new DbCopier(deps.storageDir);
@@ -102,21 +112,32 @@ export class Controller {
 
   /** Manual Refresh: ignore the "only when changed" checks. */
   async refresh(): Promise<void> {
-    this.forceNext = true;
+    for (const t of this.tracks.values()) { t.force = true; t.guard.reset(); }
     this.selectionStat = null;
     this.summariesStat = null;
     this.fileOnly.clear();
-    this.guard.reset();
     if (this.rpc) {
       const wasUp = this.rpc.up;
       const up = this.rpc.refreshLookup();
-      if (up !== wasUp) this.fileStat = null;
+      if (up !== wasUp) for (const t of this.tracks.values()) t.fileStat = null;
     }
     const roots = existingRoots(this.deps.config().roots);
     this.deps.store.set({ noRoot: roots.length === 0 });
     this.deps.onNoRoot?.(roots.length === 0);
     if (roots.length === 0) return;
     await this.poller.runAll();
+  }
+
+  /** `maxConversations` changed: re-rank Recent now (no rescan, expiry timers untouched). */
+  rerank(): void {
+    const cfg = this.deps.config();
+    const cands = this.conversations.map((c) => ({
+      id: c.id,
+      viewMs: this.views.get(c.id),
+      // Without a summaries db, fall back to the transcript's last write.
+      writtenMs: this.summaries.get(c.id)?.lastModifiedMs ?? (this.summaries.size === 0 ? c.transcriptMtimeMs : undefined),
+    }));
+    this.deps.store.syncRecent(rankRecent(cands, this.activeId, cfg.maxConversations), this.activeId, cfg.recentExpiryMinutes * 60_000);
   }
 
   /** Config change affecting roots/limits: rescan now. */
@@ -162,7 +183,9 @@ export class Controller {
     const roots = this.roots();
     this.conversations = listConversations(roots);
     this.refreshSummaries(roots);
+    this.views = this.annotations.scan(roots);
     this.recomputeActive();
+    this.rerank();
   }
 
   private refreshSummaries(roots: string[]): void {
@@ -204,20 +227,35 @@ export class Controller {
     }
     if (res.id !== this.activeId) {
       this.activeId = res.id;
-      this.source = null;
-      this.fileStat = null;
-      this.guard.reset();
+      const t = this.tracks.get(res.id);
+      if (t) { t.fileStat = null; t.guard.reset(); }
+      this.notSelected = res.notSelected;
+      this.rerank(); // the new Active leaves Recent (cancels its timer); the old one may enter it
+      return;
     }
     this.notSelected = res.notSelected;
   }
 
   private pollFiles(): void {
-    if (this.activeId === null) return;
-    const info = this.conversations.find((c) => c.id === this.activeId);
+    const ids = [...(this.activeId !== null ? [this.activeId] : []), ...this.deps.store.recentIds()];
+    for (const id of [...this.tracks.keys()]) {
+      if (!ids.includes(id)) { this.tracks.delete(id); this.puller?.cancel(id); }
+    }
+    for (const id of ids) {
+      try { this.pollOne(id); } catch (e) { this.deps.logger.error(`poll ${id} failed: ${(e as Error).message}`); }
+    }
+  }
+
+  private roleOf(id: string): 'active' | 'recent' { return id === this.activeId ? 'active' : 'recent'; }
+
+  private pollOne(id: string): void {
+    const info = this.conversations.find((c) => c.id === id);
     if (!info) return;
-    if (!this.source || this.source.transcriptPath !== info.transcriptPath) {
+    let tr = this.tracks.get(id);
+    if (!tr) { tr = { source: null, fileStat: null, lastKey: null, force: false, guard: new StaleGuard(2) }; this.tracks.set(id, tr); }
+    if (!tr.source || tr.source.transcriptPath !== info.transcriptPath) {
       const cfg = () => this.deps.config();
-      this.source = new FileSource(info.id, info.transcriptPath, info.dbPath, {
+      tr.source = new FileSource(info.id, info.transcriptPath, info.dbPath, {
         openDb: this.deps.openDb,
         storageDir: this.deps.storageDir,
         limitOverrides: () => cfg().limits,
@@ -226,49 +264,58 @@ export class Controller {
         heavyPercent: () => cfg().heavyItemPercent,
         onWarn: (m) => this.deps.logger.error(m),
       });
-      this.fileStat = null;
+      tr.fileStat = null;
     }
+    const role = this.roleOf(id);
+    const ns = role === 'active' && this.notSelected;
     const sum = this.summaries.get(info.id);
     const title = resolveTitle({
       summaryTitle: sum?.title, preview: sum?.preview,
-      firstPrompt: this.source.summary().firstPrompt, lastActivity: this.source.summary().lastActivity,
+      firstPrompt: tr.source.summary().firstPrompt, lastActivity: tr.source.summary().lastActivity,
     });
-    const key = {
+    const key: FileKey = {
       t: statKey(info.transcriptPath), d: statKey(info.dbPath), w: statKey(info.dbPath + '-wal'),
-      title, ns: this.notSelected,
+      title, ns, role,
     };
-    const prev = this.fileStat;
-    const forced = this.forceNext;
-    const unchanged = prev && !this.forceNext && sameStat(prev.t, key.t) && sameStat(prev.d, key.d) && sameStat(prev.w, key.w)
-      && prev.title === key.title && prev.ns === key.ns;
+    const prev = tr.fileStat;
+    const forced = tr.force;
+    const unchanged = prev && !forced && sameStat(prev.t, key.t) && sameStat(prev.d, key.d) && sameStat(prev.w, key.w)
+      && prev.title === key.title && prev.ns === key.ns && prev.role === key.role;
     if (unchanged) return;
-    this.forceNext = false;
+    tr.force = false;
     if (this.rpc?.up && !this.fileOnly.has(info.id)) {
       // rpc source: pull on change (settle + single flight handled by the puller).
-      this.fileStat = key;
-      this.lastKey = key;
+      tr.fileStat = key;
+      tr.lastKey = key;
       this.puller?.notifyChange(info.id, forced);
       return;
     }
     this.updateFromFile(info, sum, title, key);
   }
 
-  private updateFromFile(info: ConversationInfo, sum: SummaryRow | undefined, title: string, key: NonNullable<Controller['fileStat']>): void {
-    if (!this.source) return;
+  private publish(snap: Snapshot): void {
+    if (snap.role === 'active') this.deps.store.setActive(snap);
+    else this.deps.store.setRecent(snap);
+  }
+
+  private updateFromFile(info: ConversationInfo, sum: SummaryRow | undefined, title: string, key: FileKey): void {
+    const tr = this.tracks.get(info.id);
+    if (!tr?.source) return;
+    const role = this.roleOf(info.id);
     try {
-      const snap = this.source.update(title, { notSelected: this.notSelected, role: 'active' });
+      const snap = tr.source.update(title, { notSelected: role === 'active' && this.notSelected, role });
       // Title may now come from the transcript's first prompt (after parsing).
       snap.title = resolveTitle({
         summaryTitle: sum?.title, preview: sum?.preview,
-        firstPrompt: this.source.summary().firstPrompt, lastActivity: this.source.summary().lastActivity,
+        firstPrompt: tr.source.summary().firstPrompt, lastActivity: tr.source.summary().lastActivity,
       });
-      this.fileStat = { ...key, title: snap.title };
-      this.deps.store.set({ stale: false });
-      this.deps.store.setActive(snap);
+      tr.fileStat = { ...key, title: snap.title, role };
+      if (role === 'active') this.deps.store.set({ stale: false });
+      this.publish(snap);
     } catch (e) {
       // Keep the last good snapshot, mark stale.
       this.deps.logger.error(`file read failed for ${info.id}: ${(e as Error).message}`);
-      this.deps.store.set({ stale: true });
+      if (role === 'active') this.deps.store.set({ stale: true });
     }
   }
 
@@ -276,8 +323,7 @@ export class Controller {
 
   /** rpc went down or came back: re-evaluate the active Conversation from its best source now. */
   private rpcSwitched(): void {
-    this.fileStat = null;
-    this.guard.reset();
+    for (const t of this.tracks.values()) { t.fileStat = null; t.guard.reset(); }
     this.pollFiles();
   }
 
@@ -295,21 +341,25 @@ export class Controller {
 
   private async pullRpc(id: string): Promise<void> {
     const rpc = this.rpc;
-    if (!rpc?.up || id !== this.activeId || !this.source) return;
+    const tr = this.tracks.get(id);
+    if (!rpc?.up || !tr?.source) return;
     const info = this.conversations.find((c) => c.id === id);
     if (!info) return;
-    const source = this.source;
+    const source = tr.source;
     let steps: ReturnType<FileSource['readSteps']> = [];
     try { steps = source.readSteps(); } catch (e) { this.deps.logger.debug(`transcript read failed: ${(e as Error).message}`); }
 
     let meta;
     try {
+      // One server answers for any Conversation (spec 13), so Recent ones use it too.
       meta = parseGeneratorMetadata(await rpc.call('GetCascadeTrajectoryGeneratorMetadata', { cascadeId: id }));
     } catch (e) {
-      if (id === this.activeId) this.rpcFailure(id, e);
+      if (this.tracks.get(id) === tr) this.rpcFailure(id, e);
       return;
     }
-    if (id !== this.activeId || this.source !== source) return; // switched while waiting
+    if (this.tracks.get(id) !== tr || tr.source !== source) return; // dropped/switched while waiting
+    const role = this.roleOf(id);
+    const notSelected = role === 'active' && this.notSelected;
 
     const transcriptLast = lastPlannerStep(steps);
     if (!meta) {
@@ -319,15 +369,15 @@ export class Controller {
         this.fileOnly.add(id);
         this.deps.logger.info(`rpc: no data for ${id}; using file for it`);
       }
-      this.guard.reset();
+      tr.guard.reset();
       const title = resolveTitle({
         summaryTitle: this.summaries.get(id)?.title, preview: this.summaries.get(id)?.preview,
         firstPrompt: source.summary().firstPrompt, lastActivity: source.summary().lastActivity,
       });
-      this.updateFromFile(info, this.summaries.get(id), title, { ...(this.lastKey ?? { t: null, d: null, w: null, ns: this.notSelected }), title });
+      this.updateFromFile(info, this.summaries.get(id), title, { ...(tr.lastKey ?? { t: null, d: null, w: null, ns: notSelected, role }), title });
       return;
     }
-    if (this.guard.check(meta.lastStepIndex, transcriptLast)) {
+    if (tr.guard.check(meta.lastStepIndex, transcriptLast)) {
       this.rpc?.fail('server stale (trails the transcript)');
       this.rpcSwitched();
       return;
@@ -346,11 +396,11 @@ export class Controller {
       limitDefault: cfg.limitsDefault,
       remembered: this.deps.remembered?.all(),
       heavyPercent: cfg.heavyItemPercent,
-      notSelected: this.notSelected,
-      role: 'active',
+      notSelected,
+      role,
     });
     this.deps.remembered?.remember(snap.modelKey, meta.maxContextTokens);
-    this.deps.store.set({ stale: false });
-    this.deps.store.setActive(snap);
+    if (role === 'active') this.deps.store.set({ stale: false });
+    this.publish(snap);
   }
 }

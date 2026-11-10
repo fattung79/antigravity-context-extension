@@ -1,4 +1,5 @@
 import type { Group, GroupItem, Snapshot } from '../model';
+import { countdownText } from '../recent';
 import { formatTokens } from './statusBarFormat';
 
 export interface RenderedItem {
@@ -44,7 +45,7 @@ export function buildConversationTooltip(snap: Snapshot): string | undefined {
     `Groups are Antigravity's own count (${formatTokens(b)}), which differs from billed.`;
 }
 
-export function buildConversationDescription(snap: Snapshot): string {
+export function buildConversationDescription(snap: Snapshot, now: number = Date.now()): string {
   const parts: string[] = [];
 
   if (snap.used !== null && snap.limit !== null && snap.limit > 0) {
@@ -67,10 +68,14 @@ export function buildConversationDescription(snap: Snapshot): string {
     parts.push('not selected');
   }
 
+  if (snap.role === 'recent' && snap.expiresAt !== undefined) {
+    parts.push(countdownText(snap.expiresAt - now));
+  }
+
   return parts.join(' · ');
 }
 
-export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean): RenderedItem[] {
+export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean, now: number = Date.now()): RenderedItem[] {
   return snapshots.map((snap) => {
     const groups: RenderedItem[] = snap.groups.map((g) => {
       let rawChildren = g.children;
@@ -109,7 +114,7 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean)
       id: snap.conversationId,
       type: 'conversation',
       label: snap.title,
-      description: buildConversationDescription(snap),
+      description: buildConversationDescription(snap, now),
       tooltip: buildConversationTooltip(snap),
       role: snap.role,
       notSelected: snap.notSelected,
