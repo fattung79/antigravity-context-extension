@@ -96,17 +96,43 @@ export function parseLine(line: string): KeptStep | null {
   return step;
 }
 
+interface Entry {
+  step: KeptStep;
+  pos?: { start: number; length: number };
+  /** Entry number this one continues from, or -1 (first step / nothing lower seen yet). */
+  pred: number;
+}
+
+/**
+ * Incremental transcript parser. Several runs can write into one transcript (a leftover server
+ * after a forced close, spec 13), so step indices alone repeat and go backwards. The kept steps are
+ * a chain traced back from the LAST line: each entry continues from the latest EARLIER line whose
+ * index is exactly one less (else the closest lower index, so gaps never cut history). A genuine
+ * rewind (an edited message) links back to the original earlier steps, so it still wins.
+ */
 export class TranscriptParser {
   /** Bytes consumed so far (never past an unterminated last line). */
   offset = 0;
-  kept: KeptStep[] = [];
-  /** Byte position of each kept step's line (absolute file offsets), so hover reads only those bytes. */
-  lines = new Map<number, { start: number; length: number }>();
+  private entries: Entry[] = [];
+  /** Latest entry number seen so far for each step index. */
+  private lastAt = new Map<number, number>();
+  private chain: { kept: KeptStep[]; lines: Map<number, { start: number; length: number }> } | null = null;
 
   reset(): void {
     this.offset = 0;
-    this.kept = [];
-    this.lines.clear();
+    this.entries = [];
+    this.lastAt.clear();
+    this.chain = null;
+  }
+
+  /** Kept steps in index order: the chain ending at the last line. */
+  get kept(): KeptStep[] {
+    return this.trace().kept;
+  }
+
+  /** Byte position of each kept step's line (absolute file offsets), so hover reads only those bytes. */
+  get lines(): Map<number, { start: number; length: number }> {
+    return this.trace().lines;
   }
 
   /** Feed bytes read from `this.offset`. Returns bytes consumed (up to the last newline). */
@@ -129,15 +155,29 @@ export class TranscriptParser {
     return lastNl + 1;
   }
 
-  /** Rewind rule: entry index <= last kept index => drop kept entries with index >= it. */
   push(step: KeptStep, pos?: { start: number; length: number }): void {
-    const last = this.kept[this.kept.length - 1];
-    if (last && step.index <= last.index) {
-      this.kept = this.kept.filter((k) => k.index < step.index);
-      for (const k of [...this.lines.keys()]) if (k >= step.index) this.lines.delete(k);
+    let pred = this.lastAt.get(step.index - 1);
+    if (pred === undefined) {
+      // Gap: continue from the closest lower index seen so far.
+      let best = -1;
+      for (const k of this.lastAt.keys()) if (k < step.index && k > best) best = k;
+      pred = best >= 0 ? this.lastAt.get(best)! : -1;
     }
-    this.kept.push(step);
-    if (pos) this.lines.set(step.index, pos);
+    const n = this.entries.length;
+    this.entries.push({ step, pos, pred });
+    this.lastAt.set(step.index, n);
+    this.chain = null;
+  }
+
+  private trace(): { kept: KeptStep[]; lines: Map<number, { start: number; length: number }> } {
+    if (this.chain) return this.chain;
+    const picked: Entry[] = [];
+    for (let n = this.entries.length - 1; n >= 0; n = this.entries[n]!.pred) picked.push(this.entries[n]!);
+    picked.reverse();
+    const lines = new Map<number, { start: number; length: number }>();
+    for (const e of picked) if (e.pos) lines.set(e.step.index, e.pos);
+    this.chain = { kept: picked.map((e) => e.step), lines };
+    return this.chain;
   }
 
   summary(): TranscriptSummary {
