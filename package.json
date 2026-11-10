@@ -57,7 +57,7 @@
           "default": 150,
           "minimum": 1,
           "maximum": 10000,
-          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `150` for 150,000, not `150000`. The Threshold that drives the colours, for every model not listed in `#contextViewer.thresholdPerModel#`. Clear it to use each model's Context window as its Threshold."
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `150` for 150,000, not `150000`.\n\nSets the traffic-light colour from the context **actually used**: 🟢 up to 50% of the Threshold, 🟡 above 50%, 🟠 above 80%, 🔴 above 100%. Independent of the model's Context window, so you can be warned well before the model's maximum. Applies to every model not listed in `#contextViewer.thresholdPerModel#`. Clear it to use each model's Context window as its Threshold."
         },
         "contextViewer.thresholdPerModel": {
           "type": "object",
@@ -67,7 +67,7 @@
             "minimum": 1,
             "maximum": 10000
           },
-          "markdownDescription": "**Unit: thousands of tokens (k).** Threshold for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 190 }`. Models not listed use `#contextViewer.threshold#`."
+          "markdownDescription": "**Unit: thousands of tokens (k).** Threshold for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 190 }`. Sets the traffic-light colour like `#contextViewer.threshold#`, which applies to models not listed here."
         },
         "contextViewer.contextWindow": {
           "type": [
@@ -75,17 +75,19 @@
             "null"
           ],
           "default": null,
-          "minimum": 1000,
-          "markdownDescription": "**Unit: tokens (not k).** Enter `256000`, not `256`. Last-resort Context window, used only when neither `#contextViewer.contextWindowPerModel#`, Antigravity, nor a built-in value knows the model's. Empty: no limit known."
+          "minimum": 1,
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `256` for 256,000, not `256000`.\n\nThe model's **maximum** context: the denominator of the status bar figures (`62% · 159k/256k`) and of the heavy-item %. Does not change the colours (see `#contextViewer.threshold#`). Last resort: used only when neither `#contextViewer.contextWindowPerModel#`, Antigravity, nor a built-in value knows the model's window. Empty: no limit known.",
+          "maximum": 10000
         },
         "contextViewer.contextWindowPerModel": {
           "type": "object",
           "default": {},
           "additionalProperties": {
             "type": "number",
-            "minimum": 1000
+            "minimum": 1,
+            "maximum": 10000
           },
-          "markdownDescription": "**Unit: tokens (not k).** Context window override for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 256000 }`. Takes precedence over what Antigravity reports."
+          "markdownDescription": "**Unit: thousands of tokens (k).** The model's maximum context for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 256 }`. Takes precedence over what Antigravity reports. Does not change the colours."
         },
         "contextViewer.heavyItemPercent": {
           "type": "number",

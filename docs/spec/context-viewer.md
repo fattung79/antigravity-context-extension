@@ -25,17 +25,17 @@ Why: [Map](../../wayfinder/context-viewer/map.md), [What shape does the handoff 
 
 ## 2. Settings
 
-All under `contextViewer.*`, declared in `package.json` `contributes.configuration`. Thresholds are entered in thousands of tokens; limits in raw tokens.
+All under `contextViewer.*`, declared in `package.json` `contributes.configuration`. Threshold and Context window settings are all entered in thousands of tokens (k); `config` converts Context window values to tokens.
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
 | `roots` | string[] | `["~/.gemini/antigravity/"]` | Data roots to scan (each has `brain/`, `conversations/`, `annotations/`, `conversation_summaries.db`). `~` expanded. Change => rescan Conversations. |
 | `maxConversations` | number (>=1) | `3` | Caps tree roots, counting the Active Conversation (the status bar shows Active only). Recent = max - 1. Change => re-rank Recent. |
 | `recentExpiryMinutes` | number | `3` | A Recent Conversation is dropped this many minutes after it entered the Recent list. |
-| `threshold` | number or null (1–10000) | `150` | Threshold in **thousands** for models not in `thresholdPerModel`. Cleared (null) => the model's Context window is the Threshold. |
+| `threshold` | number or null (1–10000) | `150` | Threshold in **thousands** for models not in `thresholdPerModel`. Sets the colours from context actually used, independent of the Context window. Cleared (null) => the model's Context window is the Threshold. |
 | `thresholdPerModel` | object `{ "<model key>": number }` | `{}` | Per-model Threshold in **thousands** (`190` = 190k). Model key as in section 5. |
-| `contextWindow` | number or null (>= 1000) | `null` | Last-resort Context window in **tokens**. Empty => no limit known. |
-| `contextWindowPerModel` | object `{ "<model key>": number }` | `{}` | Per-model Context window override in **tokens**. Highest priority in section 5. |
+| `contextWindow` | number or null (1–10000) | `null` | Last-resort Context window in **thousands** (`256` = 256k). The model's maximum: denominator of the figures and heavy-item %; never changes the colours. Empty => no limit known. |
+| `contextWindowPerModel` | object `{ "<model key>": number }` | `{}` | Per-model Context window override in **thousands**. Highest priority in section 5. |
 | `heavyItemPercent` | number | `5` | Chat Messages items above this % of the Context window are highlighted (error colour). |
 | `hoverChars` | number | `2000` | Hover cut-off for chat item text: head = 75%, tail = 25%; thinking budget = 50%. |
 | `logLevel` | `off`/`error`/`info`/`debug` | `error` | Output channel verbosity; applied immediately. `error`: failures; `info`: + data-source switches; `debug`: + each poll hit and RPC call timing. |

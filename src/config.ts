@@ -8,8 +8,8 @@ export interface Config {
   recentExpiryMinutes: number;
   thresholdPerModel: Record<string, number>;
   threshold: number | null;
-  contextWindowPerModel: Record<string, number>;
-  contextWindow: number | null;
+  contextWindowPerModel: Record<string, number>; // tokens (setting is in k)
+  contextWindow: number | null;                  // tokens (setting is in k)
   heavyItemPercent: number;
   hoverChars: number;
   logLevel: LogLevel;
@@ -41,6 +41,15 @@ function numOrNull(v: unknown, fallback: number | null): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
+/** Context window settings are entered in k (like Threshold); the rest of the code works in tokens. */
+function kToTokens(n: number | null): number | null {
+  return n === null ? null : Math.round(n * 1000);
+}
+
+function thousands(m: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(Object.entries(m).map(([k, v]) => [k, Math.round(v * 1000)]));
+}
+
 export function parseConfig(get: RawGetter, home?: string): Config {
   const rootsRaw = get<unknown>('roots', DEFAULT_ROOTS);
   const roots = (Array.isArray(rootsRaw) ? rootsRaw : DEFAULT_ROOTS)
@@ -57,8 +66,8 @@ export function parseConfig(get: RawGetter, home?: string): Config {
     recentExpiryMinutes: typeof exp === 'number' && exp >= 0 ? exp : 3,
     thresholdPerModel: numMap(get<unknown>('thresholdPerModel', {})),
     threshold: numOrNull(get<unknown>('threshold', 150), 150),
-    contextWindowPerModel: numMap(get<unknown>('contextWindowPerModel', {})),
-    contextWindow: numOrNull(get<unknown>('contextWindow', null), null),
+    contextWindowPerModel: thousands(numMap(get<unknown>('contextWindowPerModel', {}))),
+    contextWindow: kToTokens(numOrNull(get<unknown>('contextWindow', null), null)),
     heavyItemPercent: typeof heavy === 'number' ? heavy : 5,
     hoverChars: typeof hover === 'number' ? hover : 2000,
     logLevel: level === 'off' || level === 'error' || level === 'info' || level === 'debug' ? level : 'error',

@@ -25,10 +25,10 @@ Then in Antigravity / VS Code: Extensions -> `...` -> Install from VSIX, or `ant
 | `contextViewer.roots` | `["~/.gemini/antigravity/"]` | Data roots to scan |
 | `contextViewer.maxConversations` | 3 | Tree roots cap (status bar: Active only) |
 | `contextViewer.recentExpiryMinutes` | 3 | Minutes before a Recent Conversation drops |
-| `contextViewer.threshold` | 150 | Threshold, **in k** (`150` = 150,000). Cleared: the model's Context window |
+| `contextViewer.threshold` | 150 | Threshold, **in k** (`150` = 150,000): sets the traffic-light colour from context used, independent of the Context window. Cleared: the model's Context window |
 | `contextViewer.thresholdPerModel` | `{}` | Per-model Threshold, **in k** (`{ "Gemini 3.8 Flash": 190 }`) |
-| `contextViewer.contextWindow` | empty | Last-resort Context window, **in tokens** (`256000`) |
-| `contextViewer.contextWindowPerModel` | `{}` | Per-model Context window override, **in tokens** |
+| `contextViewer.contextWindow` | empty | Last-resort Context window, **in k** (`256`): the model's maximum, the denominator of `62% · 159k/256k` |
+| `contextViewer.contextWindowPerModel` | `{}` | Per-model Context window override, **in k** (`{ "Gemini 3.8 Flash": 256 }`) |
 | `contextViewer.heavyItemPercent` | 5 | Highlight chat items above this % of the window |
 | `contextViewer.hoverChars` | 2000 | Hover cut-off (head 75%, tail 25%) |
 | `contextViewer.logLevel` | `error` | Output panel verbosity: `error` failures; `info` + data-source switches; `debug` + each poll and RPC call. Display unaffected |
