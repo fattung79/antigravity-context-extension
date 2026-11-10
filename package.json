@@ -5,6 +5,10 @@
   "version": "0.1.0",
   "publisher": "local",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fattung79/antigravity-context-extension"
+  },
   "license": "UNLICENSED",
   "engines": {
     "vscode": "^1.107.0"
@@ -180,7 +184,7 @@
     "watch": "node esbuild.mjs --watch",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "package": "vsce package --allow-missing-repository --skip-license"
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

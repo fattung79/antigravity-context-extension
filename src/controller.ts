@@ -168,7 +168,7 @@ export class Controller {
       this.selectionStat = key; // only remember on success; broken copies retry next poll
     } catch (e) {
       this.copier.invalidate(name);
-      this.deps.logger.debug(`state.vscdb read failed (retry next poll): ${(e as Error).message}`);
+      this.deps.logger.info(`state.vscdb copy/open failed (retry next poll): ${(e as Error).message}`);
       this.setSelected(undefined);
     }
   }
@@ -206,7 +206,7 @@ export class Controller {
         this.summariesRoot = root;
       } catch (e) {
         this.copier.invalidate('conversation_summaries.db');
-        this.deps.logger.debug(`summaries read failed: ${(e as Error).message}`);
+        this.deps.logger.info(`summaries db copy/open failed: ${(e as Error).message}`);
       }
       return;
     }
@@ -282,6 +282,7 @@ export class Controller {
     const unchanged = prev && !forced && sameStat(prev.t, key.t) && sameStat(prev.d, key.d) && sameStat(prev.w, key.w)
       && prev.title === key.title && prev.ns === key.ns && prev.role === key.role;
     if (unchanged) return;
+    this.deps.logger.debug(`poll hit: ${info.id} changed${forced ? ' (forced)' : ''}`);
     tr.force = false;
     if (this.rpc?.up && !this.fileOnly.has(info.id)) {
       // rpc source: pull on change (settle + single flight handled by the puller).
