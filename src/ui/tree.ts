@@ -130,6 +130,8 @@ export class ContextInventoryProvider
         return new vscode.ThemeIcon('symbol-namespace', tint);
       case 'tool':
         return new vscode.ThemeIcon('wrench', tint);
+      case 'compaction':
+        return new vscode.ThemeIcon('archive', tint);
       case 'system':
         return new vscode.ThemeIcon('info', tint);
       default:
