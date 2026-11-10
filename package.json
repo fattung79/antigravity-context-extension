@@ -157,9 +157,32 @@
         "command": "contextViewer.collapseAll",
         "title": "Context Viewer: Collapse All",
         "icon": "$(collapse-all)"
+      },
+      {
+        "command": "contextViewer.openItem",
+        "title": "Context Viewer: Open item content",
+        "icon": "$(go-to-file)"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "contextViewer.openItem",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "contextViewer.openItem",
+          "when": "view == contextViewer.inventory && viewItem =~ /^(chat|section|tool)$/",
+          "group": "inline"
+        },
+        {
+          "command": "contextViewer.openItem",
+          "when": "view == contextViewer.inventory && viewItem =~ /^(chat|section|tool)$/",
+          "group": "navigation"
+        }
+      ],
       "view/title": [
         {
           "command": "contextViewer.toggleLargestFirst",

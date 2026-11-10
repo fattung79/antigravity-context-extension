@@ -18,6 +18,15 @@ export interface HoverDeps {
   token?: () => string | undefined;
 }
 
+/** contextValue for items that support Open: chat (one step), section (System Prompt), tool. */
+export function openKindOf(e: RenderedItem): 'chat' | 'section' | 'tool' | undefined {
+  if (e.type !== 'item') return undefined;
+  if (e.groupName === 'Chat Messages' && e.step !== undefined) return 'chat';
+  if (e.groupName === 'System Prompt' && e.kind === 'section' && e.name) return 'section';
+  if (e.groupName === 'Tools' && e.kind === 'tool' && e.name) return 'tool';
+  return undefined;
+}
+
 export class ContextInventoryProvider
   implements vscode.TreeDataProvider<RenderedItem>
 {
@@ -112,7 +121,9 @@ export class ContextInventoryProvider
         item.iconPath = new vscode.ThemeIcon('tools');
       }
     } else {
-      item.contextValue = 'item';
+      const cv = openKindOf(element);
+      item.contextValue = cv ?? 'item';
+      if (cv === 'chat') item.command = { command: 'contextViewer.openItem', title: 'Open item content', arguments: [element] };
       item.iconPath = this.getKindIcon(element.kind, element.heavy);
     }
 

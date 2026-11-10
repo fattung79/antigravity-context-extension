@@ -17,6 +17,8 @@ export interface RenderedItem {
   role?: 'active' | 'recent';
   notSelected?: boolean;
   children?: RenderedItem[];
+  /** Raw item name (section/tool name) without the token suffix; used by Open. */
+  name?: string;
   /** Hover lookup keys (no text is stored). */
   conversationId?: string;
   groupName?: string;
@@ -94,6 +96,7 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean,
       const children: RenderedItem[] = rawChildren.map((item, idx) => ({
         id: `${snap.conversationId}/${g.name}/${idx}/${item.step ?? ''}/${item.label}`,
         type: 'item',
+        name: item.label,
         label: `${item.label} · ${formatItemTokens(item.tokens, item.estimated)}`,
         description: '',
         kind: item.kind,

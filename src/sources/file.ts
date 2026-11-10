@@ -71,6 +71,17 @@ export function readLastGenMetadata(copyPath: string, open: OpenDb): GenMetadata
   }
 }
 
+/** Raw last gen_metadata blob from a db copy, for an explicit user "Open" only. Never logged. */
+export function readLastBlob(copyPath: string, open: OpenDb): Uint8Array | null {
+  const db = open(copyPath);
+  try {
+    const row = db.prepare('SELECT data FROM gen_metadata ORDER BY idx DESC LIMIT 1').get() as { data?: Uint8Array } | undefined;
+    return row?.data ? new Uint8Array(row.data) : null;
+  } finally {
+    try { db.close(); } catch { /* ignore */ }
+  }
+}
+
 export interface FileSourceDeps {
   openDb: OpenDb | null;
   storageDir: string;
