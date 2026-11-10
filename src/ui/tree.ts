@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { Store, StoreState } from '../model';
+import { nodeUri } from './decorations';
 import {
   buildTreeHierarchy,
   type RenderedItem,
@@ -13,13 +14,30 @@ export class ContextInventoryProvider
 
   private largestFirst = false;
   private state: StoreState;
+  private roots: RenderedItem[] = [];
+  private byId = new Map<string, RenderedItem>();
 
   constructor(private store: Store) {
     this.state = store.get();
+    this.rebuild();
     store.onChange((s) => {
       this.state = s;
       this.refresh();
     });
+  }
+
+  /** The Active Conversation root, if any (first root). */
+  firstRoot(): RenderedItem | undefined { return this.roots[0]; }
+
+  getParent(element: RenderedItem): RenderedItem | undefined {
+    return element.parentId ? this.byId.get(element.parentId) : undefined;
+  }
+
+  private rebuild(): void {
+    this.roots = buildTreeHierarchy(this.state.snapshots, this.largestFirst);
+    this.byId.clear();
+    const walk = (n: RenderedItem) => { this.byId.set(n.id, n); n.children?.forEach(walk); };
+    this.roots.forEach(walk);
   }
 
   toggleLargestFirst(): boolean {
@@ -33,6 +51,7 @@ export class ContextInventoryProvider
   }
 
   refresh(): void {
+    this.rebuild();
     this._onDidChangeTreeData.fire();
   }
 
@@ -47,7 +66,9 @@ export class ContextInventoryProvider
     );
 
     item.id = element.id;
-    item.description = element.description;
+    item.description = element.description || undefined;
+    if (element.tooltip) item.tooltip = element.tooltip;
+    item.resourceUri = nodeUri(element.id, element.heavy === true);
 
     if (element.type === 'conversation') {
       const color = element.notSelected
@@ -75,38 +96,37 @@ export class ContextInventoryProvider
   }
 
   getChildren(element?: RenderedItem): Thenable<RenderedItem[]> {
-    if (!element) {
-      const roots = buildTreeHierarchy(this.state.snapshots, this.largestFirst);
-      return Promise.resolve(roots);
-    }
+    if (!element) return Promise.resolve(this.roots);
     return Promise.resolve(element.children ?? []);
   }
 
   private getKindIcon(kind?: string, heavy?: boolean): vscode.ThemeIcon {
-    if (heavy) {
-      return new vscode.ThemeIcon('flame', new vscode.ThemeColor('errorForeground'));
-    }
+    const tint = heavy ? new vscode.ThemeColor('errorForeground') : undefined;
     switch (kind) {
       case 'user':
-        return new vscode.ThemeIcon('account');
+        return new vscode.ThemeIcon('account', tint);
       case 'model':
-        return new vscode.ThemeIcon('sparkle');
+        return new vscode.ThemeIcon('sparkle', tint);
       case 'file-read':
-        return new vscode.ThemeIcon('file-code');
+        return new vscode.ThemeIcon('file-code', tint);
       case 'file-edit':
-        return new vscode.ThemeIcon('edit');
+        return new vscode.ThemeIcon('edit', tint);
       case 'command':
-        return new vscode.ThemeIcon('terminal');
+        return new vscode.ThemeIcon('terminal', tint);
       case 'web':
-        return new vscode.ThemeIcon('globe');
+        return new vscode.ThemeIcon('globe', tint);
       case 'agent':
-        return new vscode.ThemeIcon('organization');
+        return new vscode.ThemeIcon('organization', tint);
       case 'error':
         return new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+      case 'section':
+        return new vscode.ThemeIcon('symbol-namespace', tint);
+      case 'tool':
+        return new vscode.ThemeIcon('wrench', tint);
       case 'system':
-        return new vscode.ThemeIcon('info');
+        return new vscode.ThemeIcon('info', tint);
       default:
-        return new vscode.ThemeIcon('circle-outline');
+        return new vscode.ThemeIcon('circle-outline', tint);
     }
   }
 }

@@ -47,7 +47,7 @@ describe('decodeGenMetadata', () => {
   it('extracts tokens, model, limit, estimate and start step', () => {
     expect(decodeGenMetadata(blob())).toEqual({
       input: 12345, cacheRead: 150000, output: 321,
-      modelDisplay: 'Gemini 3.8 Flash (Medium)', limit: 256000, estimate: 160000, startStepIndex: 25,
+      modelDisplay: 'Gemini 3.8 Flash (Medium)', limit: 256000, estimate: 160000, startStepIndex: 25, breakdown: null,
     });
   });
 

@@ -7,14 +7,15 @@ export type ContextItemKind =
   | 'web'
   | 'agent'
   | 'error'
-  | 'system';
+  | 'system'
+  | 'section'
+  | 'tool';
 
 export interface ChatItem {
   step: number;
   kind: ContextItemKind;
   label: string;
   tokens: number;
-  chars: number;
   heavy?: boolean;
 }
 
@@ -24,6 +25,7 @@ export interface CompactStep {
   type: string;
   status?: string;
   hasError?: boolean;
+  /** Chars of text that sits in the context for this step (user request text, reply/result content, system message). */
   contentLength: number;
   promptPreview?: string;
   toolCalls?: Array<{
@@ -66,6 +68,10 @@ export function extractTarget(args?: Record<string, unknown>): string {
     args.Path ??
     args.path ??
     args.AbsolutePath ??
+    args.Url ??
+    args.URL ??
+    args.url ??
+    args.Query ??
     args.FilePath ??
     args.file ??
     args.CommandLine ??
@@ -88,95 +94,114 @@ export function estimateTokens(chars: number): number {
   return Math.ceil(Math.max(0, chars) / 3);
 }
 
+/** One token-bearing entry: a transcript step (estimated) or a db breakdown entry (exact). */
+export interface Unit {
+  step: number;
+  type: string;
+  tokens: number;
+}
+
+export interface BuildOptions {
+  estimated: boolean;
+}
+
+/** Estimated chars in context for one step (reply content + tool_calls JSON, or content). */
+export function stepChars(s: CompactStep): number {
+  let n = s.contentLength;
+  for (const tc of s.toolCalls ?? []) n += tc.callChars;
+  return n;
+}
+
+/** Estimated units from transcript steps (CHECKPOINT is left out: its tokens never count). */
+export function stepsToUnits(steps: CompactStep[]): Unit[] {
+  return steps
+    .filter((s) => s.type !== 'CHECKPOINT')
+    .map((s) => ({ step: s.index, type: s.type, tokens: estimateTokens(stepChars(s)) }));
+}
+
+function isErr(s?: CompactStep): boolean {
+  return Boolean(s && (s.status === 'ERROR' || s.hasError));
+}
+
+/** Split `total` across weights, remainder to the first; the sum is preserved. */
+export function splitTokens(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  if (weights.length === 0) return [];
+  if (sum <= 0) return weights.map((_, i) => (i === 0 ? total : 0));
+  const parts = weights.map((w) => Math.floor((total * w) / sum));
+  parts[0] = (parts[0] ?? 0) + (total - parts.reduce((a, b) => a + b, 0));
+  return parts;
+}
+
 /**
- * Builds chat items by pairing tool calls with subsequent GENERIC steps in order.
+ * Chat Messages items from units (in step order). A PLANNER_RESPONSE with k tool calls
+ * takes the next k contiguous GENERIC units by position; counts are summed per call.
+ * Labels/kinds come from the transcript steps (by index); missing steps fall back to the type.
  */
-export function buildChatItems(steps: CompactStep[]): ChatItem[] {
+export function buildItems(units: Unit[], steps: CompactStep[], opts: BuildOptions): ChatItem[] {
+  const byIndex = new Map<number, CompactStep>();
+  for (const s of steps) byIndex.set(s.index, s);
   const items: ChatItem[] = [];
+  const push = (it: ChatItem) => {
+    if (opts.estimated && it.tokens === 0 && it.kind !== 'error') return;
+    items.push(it);
+  };
 
-  for (let i = 0; i < steps.length; i++) {
-    const s = steps[i]!;
-    if (s.type === 'CHECKPOINT') continue;
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i]!;
+    const s = byIndex.get(u.step);
+    const type = s?.type ?? u.type;
+    const err = isErr(s);
 
-    const isError = s.status === 'ERROR' || s.hasError;
-
-    if (s.type === 'USER_INPUT') {
-      const preview = s.promptPreview || 'User request';
-      items.push({
-        step: s.index,
-        kind: isError ? 'error' : 'user',
-        label: `#${s.index} ${preview}`,
-        tokens: estimateTokens(s.contentLength),
-        chars: s.contentLength,
-      });
-      continue;
-    }
-
-    if (s.type === 'SYSTEM_MESSAGE') {
-      items.push({
-        step: s.index,
-        kind: isError ? 'error' : 'system',
-        label: `#${s.index} System message`,
-        tokens: estimateTokens(s.contentLength),
-        chars: s.contentLength,
-      });
-      continue;
-    }
-
-    if (s.source === 'MODEL' && s.type === 'PLANNER_RESPONSE') {
-      const toolCalls = s.toolCalls ?? [];
-
-      if (toolCalls.length > 0) {
-        let genericIdx = i + 1;
-        for (let t = 0; t < toolCalls.length; t++) {
-          const tc = toolCalls[t]!;
-          let resultChars = 0;
-          let resultError = false;
-
-          while (genericIdx < steps.length) {
-            const next = steps[genericIdx]!;
-            if (next.type === 'GENERIC' || next.source === 'MODEL') {
-              resultChars += next.contentLength;
-              if (next.status === 'ERROR' || next.hasError) {
-                resultError = true;
-              }
-              genericIdx++;
-              break;
-            }
-            genericIdx++;
-          }
-
-          const totalChars = tc.callChars + resultChars;
-          const kind = isError || resultError ? 'error' : classifyToolKind(tc.name);
-          const labelTarget = tc.target ? ` ${tc.target}` : '';
-          items.push({
-            step: s.index,
-            kind,
-            label: `#${s.index} ${tc.name}${labelTarget}`,
-            tokens: estimateTokens(totalChars),
-            chars: totalChars,
-          });
-        }
-        if (genericIdx > i + 1) {
-          i = genericIdx - 1;
-        }
-      } else if (s.contentLength > 0 || isError) {
-        items.push({
-          step: s.index,
-          kind: isError ? 'error' : 'model',
-          label: `#${s.index} Model reply`,
-          tokens: estimateTokens(s.contentLength),
-          chars: s.contentLength,
-        });
+    if (type === 'USER_INPUT') {
+      push({ step: u.step, kind: err ? 'error' : 'user', label: `#${u.step} ${s?.promptPreview || 'User request'}`, tokens: u.tokens });
+    } else if (type === 'SYSTEM_MESSAGE') {
+      push({ step: u.step, kind: err ? 'error' : 'system', label: `#${u.step} System message`, tokens: u.tokens });
+    } else if (type === 'CHECKPOINT') {
+      push({ step: u.step, kind: 'system', label: `#${u.step} Checkpoint summary`, tokens: u.tokens });
+    } else if (type === 'PLANNER_RESPONSE') {
+      const calls = s?.toolCalls ?? [];
+      if (calls.length === 0) {
+        push({ step: u.step, kind: err ? 'error' : 'model', label: `#${u.step} Model reply`, tokens: u.tokens });
+        continue;
       }
+      const results: Unit[] = [];
+      while (results.length < calls.length) {
+        const next = units[i + 1 + results.length];
+        if (!next || next.type !== 'GENERIC') break;
+        results.push(next);
+      }
+      const shares = splitTokens(u.tokens, calls.map((c) => c.callChars));
+      calls.forEach((tc, j) => {
+        const r = results[j];
+        const rErr = isErr(byIndex.get(r?.step ?? -1));
+        push({
+          step: u.step,
+          kind: err || rErr ? 'error' : classifyToolKind(tc.name),
+          label: `#${u.step} ${tc.name}${tc.target ? ` ${tc.target}` : ''}`,
+          tokens: (shares[j] ?? 0) + (r?.tokens ?? 0),
+        });
+      });
+      i += results.length;
+    } else {
+      push({ step: u.step, kind: err ? 'error' : 'system', label: `#${u.step} ${type === 'GENERIC' ? 'Tool result' : type}`, tokens: u.tokens });
     }
   }
-
   return items;
 }
 
-export function computeBaseline(used: number | null, chatItems: ChatItem[]): number {
+/** File-mode (estimated) Chat Messages items straight from kept transcript steps. */
+export function buildChatItems(steps: CompactStep[]): ChatItem[] {
+  return buildItems(stepsToUnits(steps), steps, { estimated: true });
+}
+
+export function computeBaseline(used: number | null, chatItems: Pick<ChatItem, 'tokens'>[]): number {
   if (used === null) return 0;
   const chatSum = chatItems.reduce((acc, it) => acc + it.tokens, 0);
   return Math.max(0, used - chatSum);
+}
+
+/** Heavy = strictly above `percent` of the Context window. */
+export function isHeavy(tokens: number, limit: number | null, percent: number): boolean {
+  return limit !== null && limit > 0 && tokens > limit * (percent / 100);
 }

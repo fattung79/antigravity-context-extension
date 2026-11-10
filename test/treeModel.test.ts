@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Snapshot } from '../src/model';
 import {
+  breakdownTotal,
   buildConversationDescription,
+  buildConversationTooltip,
   buildTreeHierarchy,
   formatItemTokens,
   sortChatItems,
@@ -33,6 +35,13 @@ describe('sortChatItems', () => {
     const sorted = sortChatItems(items, true);
     expect(sorted.map((i) => i.tokens)).toEqual([2000, 500, 100]);
     expect(sorted.map((i) => i.step)).toEqual([3, 1, 2]);
+  });
+});
+
+describe('formatItemTokens edge cases', () => {
+  it('formats small, 159k and exact values', () => {
+    expect(formatItemTokens(950, true)).toBe('~950');
+    expect(formatItemTokens(159000, false)).toBe('159k');
   });
 });
 
@@ -127,5 +136,33 @@ describe('buildTreeHierarchy', () => {
     expect(chatGroup.description).toBe('~1k');
     expect(chatGroup.children).toHaveLength(2);
     expect(chatGroup.children![1]!.heavy).toBe(true);
+    expect(chatGroup.children![1]!.label).toBe('#2 tool · ~400');
+    expect(chatGroup.children![1]!.parentId).toBe('abc/Chat Messages');
+    expect(chatGroup.parentId).toBe('abc');
+    expect(roots[0]!.parentId).toBeUndefined();
+  });
+});
+
+describe('breakdown vs billed labelling', () => {
+  const snap = (groups: Snapshot['groups']): Snapshot => ({
+    conversationId: 'abc', title: 'T', source: 'file', used: 14086, limit: 256000, limitSource: 'database',
+    modelKey: 'm', modelDisplay: 'm', estimate: 19670, groups,
+    totals: { input: 0, cacheRead: 0, output: 0, calls: 0 }, compaction: null, modelChanges: [],
+    startStepIndex: null, notSelected: false, role: 'active',
+  } as Snapshot);
+  const g = (name: string, tokens: number, estimated = false) => ({ name, tokens, estimated, children: [] }) as unknown as Snapshot['groups'][number];
+
+  it('labels the exact breakdown total as Antigravity est.', () => {
+    const s = snap([g('System Prompt', 12485), g('Tools', 5789), g('Chat Messages', 1396)]);
+    expect(breakdownTotal(s)).toBe(19670);
+    expect(buildConversationDescription(s)).toBe('6% · 14.1k/256k · file · breakdown 19.7k (Antigravity est.)');
+    expect(buildConversationTooltip(s)).toContain("Antigravity's own count");
+  });
+
+  it('omits it in ~est mode', () => {
+    const s = snap([g('Baseline', 12000, true), g('Chat Messages', 2086, true)]);
+    expect(breakdownTotal(s)).toBeNull();
+    expect(buildConversationDescription(s)).toBe('6% · 14.1k/256k · file');
+    expect(buildConversationTooltip(s)).toBeUndefined();
   });
 });

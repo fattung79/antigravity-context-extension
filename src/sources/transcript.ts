@@ -71,9 +71,11 @@ export function parseLine(line: string): KeptStep | null {
   }
 
   if (type === 'USER_INPUT' && contentStr) {
+    // Only the request text counts as context text (labels/sizes only are kept, never the text).
     const req = extractUserRequest(contentStr);
+    step.contentLength = req.length;
     step.prompt = req.slice(0, 200);
-    step.promptPreview = req.slice(0, 40) + (req.length > 40 ? '…' : '');
+    step.promptPreview = req.replace(/\s+/g, ' ').slice(0, 40) + (req.length > 40 ? '…' : '');
   }
 
   return step;
