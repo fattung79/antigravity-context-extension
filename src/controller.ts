@@ -6,7 +6,7 @@ import {
 } from './discovery';
 import type { RememberedLimits } from './limits';
 import type { Logger } from './logger';
-import type { Snapshot, Store } from './model';
+import type { RuleFile, Snapshot, Store } from './model';
 import { INTERVALS_MS, Poller, sameStat, statKey, type StatKey, type Task } from './poller';
 import { FileSource, readLastBlob } from './sources/file';
 import { RpcError } from './sources/rpc/client';
@@ -14,7 +14,7 @@ import type { Clock } from './sources/rpc/clock';
 import { RpcManager } from './sources/rpc/manager';
 import type { ProcessTable } from './sources/rpc/processTable';
 import { Puller } from './sources/rpc/puller';
-import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata } from './sources/rpc/reply';
+import { buildRpcSnapshot, lastPlannerStep, parseGeneratorMetadata, parseRuleFiles } from './sources/rpc/reply';
 import { StaleGuard } from './sources/rpc/staleGuard';
 import { DbCopier, type OpenDb } from './sources/sqlite';
 import { AnnotationReader, rankRecent } from './recent';
@@ -67,6 +67,8 @@ export class Controller {
   private activeId: string | null = null;
   private notSelected = false;
   private tracks = new Map<string, Track>();
+  /** Rule files per Conversation, refetched only when the last executionId changes. */
+  private ruleCache = new Map<string, { executionId: string | null; files: RuleFile[] | null }>();
   private annotations = new AnnotationReader();
   private views = new Map<string, number>();
   private rpc: RpcManager | null = null;
@@ -259,7 +261,7 @@ export class Controller {
   private pollFiles(): void {
     const ids = [...(this.activeId !== null ? [this.activeId] : []), ...this.deps.store.recentIds()];
     for (const id of [...this.tracks.keys()]) {
-      if (!ids.includes(id)) { this.tracks.delete(id); this.puller?.cancel(id); }
+      if (!ids.includes(id)) { this.tracks.delete(id); this.ruleCache.delete(id); this.puller?.cancel(id); }
     }
     for (const id of ids) {
       try { this.pollOne(id); } catch (e) { this.deps.logger.error(`poll ${id} failed: ${(e as Error).message}`); }
@@ -408,6 +410,20 @@ export class Controller {
       summaryTitle: sum?.title, preview: sum?.preview,
       firstPrompt: source.summary().firstPrompt, lastActivity: source.summary().lastActivity,
     });
+    let cached = this.ruleCache.get(id);
+    if (!cached || cached.executionId !== meta.lastExecutionId) {
+      try {
+        const files = parseRuleFiles(await rpc.call('GetCascadeTrajectoryExecutorMetadatas', { cascadeId: id }));
+        cached = { executionId: meta.lastExecutionId, files };
+        this.ruleCache.set(id, cached);
+      } catch (e) {
+        // Keep the old files and remember this executionId: no 145 KB retry on every pull.
+        cached = { executionId: meta.lastExecutionId, files: cached?.files ?? null };
+        this.ruleCache.set(id, cached);
+        this.deps.logger.debug(`rule files unavailable for ${id}: ${(e as Error).message}`);
+      }
+      if (this.tracks.get(id) !== tr || tr.source !== source) { this.ruleCache.delete(id); return; }
+    }
     const cfg = this.deps.config();
     const snap = buildRpcSnapshot(meta, {
       conversationId: id,
@@ -419,6 +435,7 @@ export class Controller {
       heavyPercent: cfg.heavyItemPercent,
       notSelected,
       role,
+      ruleFiles: cached?.files,
     });
     this.deps.remembered?.remember(snap.modelKey, meta.maxContextTokens);
     if (role === 'active') this.deps.store.set({ stale: false });

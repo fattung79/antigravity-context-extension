@@ -176,12 +176,21 @@
         "command": "contextViewer.openItem",
         "title": "Context Viewer: Open item content",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "contextViewer.openRuleFile",
+        "title": "Context Viewer: Open rule file",
+        "icon": "$(go-to-file)"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "contextViewer.openItem",
+          "when": "false"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
           "when": "false"
         }
       ],
@@ -194,6 +203,16 @@
         {
           "command": "contextViewer.openItem",
           "when": "view == contextViewer.inventory && viewItem =~ /^(chat|section|tool)$/",
+          "group": "navigation"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
+          "when": "view == contextViewer.inventory && viewItem == ruleFile",
+          "group": "inline"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
+          "when": "view == contextViewer.inventory && viewItem == ruleFile",
           "group": "navigation"
         }
       ],

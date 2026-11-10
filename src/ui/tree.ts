@@ -40,7 +40,7 @@ export class ContextInventoryProvider
 
   constructor(
     private store: Store,
-    private config: () => Pick<Config, 'thresholdPerModel' | 'threshold'>,
+    private config: () => Pick<Config, 'thresholdPerModel' | 'threshold' | 'roots'>,
     private hover?: HoverDeps,
   ) {
     this.state = store.get();
@@ -62,7 +62,7 @@ export class ContextInventoryProvider
   }
 
   private rebuild(): void {
-    this.roots = buildTreeHierarchy(this.state.snapshots, this.largestFirst);
+    this.roots = buildTreeHierarchy(this.state.snapshots, this.largestFirst, Date.now(), undefined, this.config().roots);
     this.byId.clear();
     const walk = (n: RenderedItem) => { this.byId.set(n.id, n); n.children?.forEach(walk); };
     this.roots.forEach(walk);
@@ -86,8 +86,10 @@ export class ContextInventoryProvider
   getTreeItem(element: RenderedItem): vscode.TreeItem {
     const item = new vscode.TreeItem(
       element.label,
-      element.type === 'item'
+      element.type === 'file'
         ? vscode.TreeItemCollapsibleState.None
+        : element.type === 'item'
+        ? (element.children?.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
         : element.role === 'recent'
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.Expanded,
@@ -101,7 +103,9 @@ export class ContextInventoryProvider
       const snap = this.state.snapshots.find((x) => x.conversationId === element.id);
       if (snap && !snap.notSelected) level = levelFor(snap, this.config());
     }
-    item.resourceUri = nodeUri(element.id, element.heavy === true, level);
+    item.resourceUri = element.type === 'file' && element.path
+      ? vscode.Uri.file(element.path)
+      : nodeUri(element.id, element.heavy === true, level);
 
     if (element.type === 'conversation') {
       const color = element.notSelected
@@ -122,6 +126,9 @@ export class ContextInventoryProvider
       } else if (element.label === 'Tools') {
         item.iconPath = new vscode.ThemeIcon('tools');
       }
+    } else if (element.type === 'file') {
+      item.contextValue = element.openable ? 'ruleFile' : 'ruleFileNoOpen';
+      if (element.openable) item.command = { command: 'contextViewer.openRuleFile', title: 'Open rule file', arguments: [element] };
     } else {
       const cv = openKindOf(element);
       item.contextValue = cv ?? 'item';
@@ -134,7 +141,7 @@ export class ContextInventoryProvider
 
   /** Lazy hover: text is read from the transcript only when the tooltip is requested. */
   resolveTreeItem(item: vscode.TreeItem, element: RenderedItem): vscode.TreeItem {
-    if (element.type !== 'item') return item;
+    if (element.type !== 'item') return item; // file rows keep their static tooltip
     let md: string;
     if (element.groupName === 'Chat Messages' && element.step !== undefined && element.conversationId && this.hover) {
       const h = this.hover;

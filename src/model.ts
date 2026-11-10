@@ -18,6 +18,9 @@ export interface Group {
   children: GroupItem[];
 }
 
+/** A rule file loaded into a Conversation (scope = SCOPE_X lower-cased, e.g. workspace/global/builtin). */
+export interface RuleFile { path: string; scope: string }
+
 export interface Snapshot {
   conversationId: string; title: string;
   source: 'rpc' | 'file';
@@ -31,6 +34,7 @@ export interface Snapshot {
   modelChanges: { step: number; from: string; to: string }[];
   startStepIndex: number | null;
   truncationReason?: string | null; // rpc only; feeds Compaction (slice 6)
+  ruleFiles?: RuleFile[];           // rpc only; rule files loaded into user_rules
   notSelected: boolean; role: 'active' | 'recent'; expiresAt?: number;
 }
 

@@ -166,3 +166,45 @@ describe('breakdown vs billed labelling', () => {
     expect(buildConversationTooltip(s)).toBeUndefined();
   });
 });
+
+describe('rule file children', () => {
+  const snap = (ruleFiles?: Snapshot['ruleFiles']): Snapshot => ({
+    conversationId: 'c1', title: 't', source: 'rpc', used: 1, limit: 10, limitSource: 'server',
+    modelKey: null, modelDisplay: null, estimate: null,
+    groups: [{ name: 'System Prompt', tokens: 10, children: [
+      { label: 'user_rules', tokens: 5, kind: 'section' }, { label: 'skills', tokens: 5, kind: 'section' },
+    ] }],
+    totals: { input: 0, cacheRead: 0, output: 0, calls: 0 }, compaction: null, modelChanges: [],
+    startStepIndex: null, notSelected: false, role: 'active', ruleFiles,
+  });
+  const rules = (roots: ReturnType<typeof buildTreeHierarchy>) => roots[0]!.children![0]!.children!.find((c) => c.name === 'user_rules')!;
+
+  it('adds one child per file with label, description (home as ~), openable', () => {
+    const roots = buildTreeHierarchy([snap([
+      { path: '/home/u/proj/AGENTS.md', scope: 'workspace' },
+      { path: '/home/u/.gemini/AGENTS.md', scope: 'global' },
+      { path: '/etc/rules/a.md', scope: 'global' },
+    ])], false, 0, '/home/u', []);
+    const ur = rules(roots);
+    expect(ur.children!.map((c) => c.label)).toEqual(['AGENTS.md', 'AGENTS.md', 'a.md']);
+    expect(ur.children!.map((c) => c.description)).toEqual(['workspace · ~/proj', 'global · ~/.gemini', 'global · /etc/rules']);
+    expect(ur.children![0]).toMatchObject({ type: 'file', openable: true, path: '/home/u/proj/AGENTS.md', conversationId: 'c1' });
+    expect(ur.children![0]!.tooltip).toBe('/home/u/proj/AGENTS.md\nLoaded rule file; its tokens are part of user_rules.');
+    expect(roots[0]!.children![0]!.children!.find((c) => c.name === 'skills')!.children).toBeUndefined();
+  });
+  it('files under a data root are not openable', () => {
+    const ur = rules(buildTreeHierarchy([snap([
+      { path: '/data/brain/x.md', scope: 'workspace' }, { path: '/data2/x.md', scope: 'workspace' },
+    ])], false, 0, '/home/u', ['/data']));
+    expect(ur.children!.map((c) => c.openable)).toEqual([false, true]);
+  });
+  it('no ruleFiles => no children; parentId chain intact', () => {
+    expect(rules(buildTreeHierarchy([snap()], false)).children).toBeUndefined();
+    expect(rules(buildTreeHierarchy([snap([])], false)).children).toBeUndefined();
+    const roots = buildTreeHierarchy([snap([{ path: '/a/b.md', scope: 'global' }])], false, 0, '/home/u');
+    const ur = rules(roots);
+    expect(ur.parentId).toBe('c1/System Prompt');
+    expect(ur.children![0]!.parentId).toBe(ur.id);
+    expect(roots[0]!.children![0]!.parentId).toBe('c1');
+  });
+});

@@ -1,4 +1,6 @@
-import type { Group, GroupItem, Snapshot } from '../model';
+import * as os from 'node:os';
+import * as posix from 'node:path/posix';
+import type { Group, GroupItem, RuleFile, Snapshot } from '../model';
 import { countdownText } from '../recent';
 import { formatTokens } from './statusBarFormat';
 
@@ -6,7 +8,7 @@ export interface RenderedItem {
   id: string;
   /** Id of the parent node (undefined for roots); used for reveal. */
   parentId?: string;
-  type: 'conversation' | 'group' | 'item';
+  type: 'conversation' | 'group' | 'item' | 'file';
   label: string;
   description: string;
   tooltip?: string;
@@ -27,6 +29,10 @@ export interface RenderedItem {
   resultStep?: number;
   /** Data source for non-chat hover metadata: `rpc` | `file` | `~est`. */
   sourceLabel?: string;
+  /** Absolute file path (type 'file'). */
+  path?: string;
+  /** False when the file lives under a data root (not user-editable content). */
+  openable?: boolean;
 }
 
 export function formatItemTokens(tokens: number, estimated?: boolean): string {
@@ -85,7 +91,36 @@ export function buildConversationDescription(snap: Snapshot, now: number = Date.
   return parts.join(' · ');
 }
 
-export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean, now: number = Date.now()): RenderedItem[] {
+const withSlash = (p: string): string => (p.endsWith('/') ? p : p + '/');
+
+function inRoots(p: string, roots: string[]): boolean {
+  return roots.some((r) => r !== '' && p.startsWith(withSlash(r)));
+}
+
+function ruleFileItem(f: RuleFile, parentId: string, conversationId: string, home: string, roots: string[]): RenderedItem {
+  const dir = posix.dirname(f.path);
+  const h = home.replace(/\/+$/, '');
+  const shown = h && dir === h ? '~' : h && dir.startsWith(h + '/') ? '~' + dir.slice(h.length) : dir;
+  return {
+    id: `${parentId}/file/${f.path}`,
+    parentId,
+    type: 'file',
+    label: posix.basename(f.path),
+    description: `${f.scope} · ${shown}`,
+    tooltip: `${f.path}\nLoaded rule file; its tokens are part of user_rules.`,
+    path: f.path,
+    openable: !inRoots(f.path, roots),
+    conversationId,
+  };
+}
+
+export function buildTreeHierarchy(
+  snapshots: Snapshot[],
+  largestFirst: boolean,
+  now: number = Date.now(),
+  home: string = os.homedir(),
+  roots: string[] = [],
+): RenderedItem[] {
   return snapshots.map((snap) => {
     const groups: RenderedItem[] = snap.groups.map((g) => {
       let rawChildren = g.children;
@@ -124,7 +159,12 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean,
 
     for (const g of groups) {
       g.parentId = snap.conversationId;
-      for (const c of g.children ?? []) c.parentId = g.id;
+      for (const c of g.children ?? []) {
+        c.parentId = g.id;
+        if (g.label === 'System Prompt' && c.name === 'user_rules' && snap.ruleFiles?.length) {
+          c.children = snap.ruleFiles.map((f) => ruleFileItem(f, c.id, snap.conversationId, home, roots));
+        }
+      }
     }
 
     return {
