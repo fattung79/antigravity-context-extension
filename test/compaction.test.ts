@@ -50,7 +50,18 @@ describe('compaction detection', () => {
     const p = parse([j({ step_index: 0, source: 'SYSTEM', type: 'CHECKPOINT', content: 'other' })]).summary();
     expect(p.compaction).toBeNull();
   });
-  it('model changes from Model Selection settings changes', () => {
+  // Real wording (checked on 6 chats, 2026-11-09): backticks, then a trailing sentence.
+  const setting = (from: string, to: string) =>
+    `\n<USER_SETTINGS_CHANGE>\nThe user changed setting \`Model Selection\` from ${from} to ${to}. No need to comment on this change unless asked.\n</USER_SETTINGS_CHANGE>`;
+  it('model changes from the real Model Selection wording (dots in names, trailing sentence)', () => {
+    const p = parse([user(0, 'hi', setting('None', 'Gemini 4 Argon (Low)')), plan(1, 1, 1),
+      user(4, 'x', setting('Gemini 4 Argon (Low)', 'Gemini 3.8 Flash (Medium)'))]).summary();
+    expect(p.modelChanges).toEqual([{ step: 4, from: 'Gemini 4 Argon (Low)', to: 'Gemini 3.8 Flash (Medium)' }]);
+  });
+  it('the initial pick (`from None`) is not a model change', () => {
+    expect(parse([user(0, 'hi', setting('None', 'Gemini 3.8 Flash (Medium)'))]).summary().modelChanges).toEqual([]);
+  });
+  it('still reads the older wording without backticks', () => {
     const p = parse([plan(1, 1, 1), user(2, 'x', '\n<USER_SETTINGS_CHANGE>\nThe user changed setting Model Selection from Gemini 4 Argon (Medium) to Gemini 3.8 Flash (Medium)\n</USER_SETTINGS_CHANGE>')]).summary();
     expect(p.modelChanges).toEqual([{ step: 2, from: 'Gemini 4 Argon (Medium)', to: 'Gemini 3.8 Flash (Medium)' }]);
   });
