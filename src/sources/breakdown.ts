@@ -48,10 +48,12 @@ export function buildBreakdownGroups(
   steps: CompactStep[],
   limit: number | null,
   heavyPercent: number,
+  startStepIndex: number | null = null,
 ): Group[] {
   return breakdown.map((g): Group => {
     if (g.name === 'Chat Messages') {
-      const units = g.children.flatMap((c) => parseStepName(c.name, c.tokens) ?? []);
+      const units = g.children.flatMap((c) => parseStepName(c.name, c.tokens) ?? [])
+        .filter((u) => startStepIndex === null || u.step >= startStepIndex);
       const children: GroupItem[] = buildItems(units, steps, { estimated: false }).map((it) => ({
         label: it.label, tokens: it.tokens, step: it.step, kind: it.kind,
         estimated: false, heavy: isHeavy(it.tokens, limit, heavyPercent),

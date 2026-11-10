@@ -25,6 +25,24 @@ function esc(s: string): string {
   return s.replace(/[\\`*_{}[\]()#+\-.!|<>~]/g, '\\$&');
 }
 
+function k1(n: number): string { return `${(n / 1000).toFixed(1)}k`; }
+
+/** Compaction tooltip lines (spec section 8); empty when none. */
+export function compactionLines(s: Pick<Snapshot, 'compaction' | 'limit' | 'modelChanges'>): string[] {
+  const out: string[] = [];
+  const c = s.compaction;
+  if (c) {
+    let line = `Compacted ${c.count}×`;
+    if (c.manual > 0) line += ` (${c.manual} manual)`;
+    if (c.lastStep !== undefined) line += ` · last at step ${c.lastStep}`;
+    if (c.was !== undefined) line += ` · was ${k1(c.was)}`;
+    out.push(line);
+    if (s.limit !== null && s.limit > 0) out.push(`Compacts at ~${formatTokens(s.limit)} (soft limit)`);
+  }
+  for (const m of s.modelChanges ?? []) out.push(`Model changed at step ${m.step}: ${esc(m.from)} → ${esc(m.to)}`);
+  return out;
+}
+
 /** Tooltip markdown (rendered untrusted). Only fields available in file mode. */
 export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold | null = null): string {
   const lines: string[] = [];
@@ -47,6 +65,7 @@ export function formatTooltip(s: Snapshot, stale = false, threshold: Threshold |
   lines.push(`Data source: ${s.source}`);
   const t = s.totals;
   lines.push(`Totals: input ${t.input.toLocaleString('en-US')}, cache read ${t.cacheRead.toLocaleString('en-US')}, output ${t.output.toLocaleString('en-US')}, ${t.calls} calls`);
+  lines.push(...compactionLines(s));
   if (stale) lines.push('', '_Stale: last file read failed; showing the last good snapshot._');
   return lines.join('\n\n');
 }

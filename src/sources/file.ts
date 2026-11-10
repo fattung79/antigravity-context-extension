@@ -4,7 +4,8 @@ import { normaliseModelKey, resolveLimit, type RememberedLimits } from '../limit
 import type { Group, GroupItem, Snapshot } from '../model';
 import { decodeGenMetadata, type GenMetadata } from './genMetadata';
 import { buildBreakdownGroups } from './breakdown';
-import { buildChatItems, computeBaseline, isHeavy } from './items';
+import { stepsFrom } from './compaction';
+import { buildChatItems, computeBaseline, isHeavy, type CompactStep } from './items';
 import { DbCopier, type OpenDb } from './sqlite';
 import { TranscriptParser, type KeptStep } from './transcript';
 
@@ -109,9 +110,11 @@ export class FileSource {
     });
     const heavyPercent = this.deps.heavyPercent?.() ?? 5;
     const breakdown = this.meta?.breakdown ?? null;
+    // Steps before the last Compaction are gone from the context: db `.1.9.1` wins, else the CHECKPOINT step.
+    const startStepIndex = this.meta?.startStepIndex ?? s.lastCheckpoint;
     const groups: Group[] = breakdown
-      ? buildBreakdownGroups(breakdown, this.parser.kept, limit, heavyPercent)
-      : this.estimatedGroups(s.used, limit, heavyPercent);
+      ? buildBreakdownGroups(breakdown, this.parser.kept, limit, heavyPercent, startStepIndex)
+      : this.estimatedGroups(stepsFrom(this.parser.kept, startStepIndex), s.used, limit, heavyPercent);
 
     return {
       conversationId: this.conversationId,
@@ -125,17 +128,17 @@ export class FileSource {
       estimate: this.meta?.estimate ?? null,
       groups,
       totals: s.totals,
-      compaction: null,
-      modelChanges: [],
-      startStepIndex: this.meta?.startStepIndex ?? null,
+      compaction: s.compaction,
+      modelChanges: s.modelChanges,
+      startStepIndex,
       notSelected: base.notSelected,
       role: base.role,
     };
   }
 
   /** File mode without db breakdown: Baseline (~est) + Chat Messages (~est). */
-  private estimatedGroups(used: number | null, limit: number | null, heavyPercent: number): Group[] {
-    const chatItems = buildChatItems(this.parser.kept);
+  private estimatedGroups(steps: CompactStep[], used: number | null, limit: number | null, heavyPercent: number): Group[] {
+    const chatItems = buildChatItems(steps);
     const children: GroupItem[] = chatItems.map((ci) => ({
       label: ci.label,
       tokens: ci.tokens,

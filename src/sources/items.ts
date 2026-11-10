@@ -8,6 +8,7 @@ export type ContextItemKind =
   | 'agent'
   | 'error'
   | 'system'
+  | 'compaction'
   | 'section'
   | 'tool';
 
@@ -28,6 +29,12 @@ export interface CompactStep {
   /** Chars of text that sits in the context for this step (user request text, reply/result content, system message). */
   contentLength: number;
   promptPreview?: string;
+  /** CHECKPOINT step that starts with `# Resuming from a compaction`. */
+  compaction?: boolean;
+  /** USER_INPUT whose request is `/compact`. */
+  compactCommand?: boolean;
+  /** USER_INPUT carrying a `Model Selection` settings change. */
+  modelChange?: { from: string; to: string };
   toolCalls?: Array<{
     name: string;
     target: string;
@@ -112,10 +119,10 @@ export function stepChars(s: CompactStep): number {
   return n;
 }
 
-/** Estimated units from transcript steps (CHECKPOINT is left out: its tokens never count). */
+/** Estimated units from transcript steps (a Compaction CHECKPOINT keeps its summary size; other CHECKPOINTs are left out). */
 export function stepsToUnits(steps: CompactStep[]): Unit[] {
   return steps
-    .filter((s) => s.type !== 'CHECKPOINT')
+    .filter((s) => s.type !== 'CHECKPOINT' || s.compaction)
     .map((s) => ({ step: s.index, type: s.type, tokens: estimateTokens(stepChars(s)) }));
 }
 
@@ -158,7 +165,7 @@ export function buildItems(units: Unit[], steps: CompactStep[], opts: BuildOptio
     } else if (type === 'SYSTEM_MESSAGE') {
       push({ step: u.step, kind: err ? 'error' : 'system', label: `#${u.step} System message`, tokens: u.tokens });
     } else if (type === 'CHECKPOINT') {
-      push({ step: u.step, kind: 'system', label: `#${u.step} Checkpoint summary`, tokens: u.tokens });
+      push({ step: u.step, kind: 'compaction', label: `#${u.step} Compaction summary`, tokens: u.tokens });
     } else if (type === 'PLANNER_RESPONSE') {
       const calls = s?.toolCalls ?? [];
       if (calls.length === 0) {

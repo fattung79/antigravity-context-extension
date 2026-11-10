@@ -1,6 +1,8 @@
 /** Incremental parser for transcript_full.jsonl (pure; no fs). */
 
+import type { Snapshot } from '../model';
 import { extractTarget, type CompactStep } from './items';
+import { detectCompaction, detectModelChanges, lastCheckpointStep } from './compaction';
 
 export interface KeptStep extends CompactStep {
   /** First ~200 chars of a user request (for title fallback). */
@@ -13,8 +15,14 @@ export interface TranscriptSummary {
   lastStepIndex: number | null;
   firstPrompt: string | null;
   lastActivity: string | null;
+  compaction: Snapshot['compaction'];
+  modelChanges: Snapshot['modelChanges'];
+  /** Step index of the last Compaction CHECKPOINT, else null. */
+  lastCheckpoint: number | null;
 }
 
+const CHECKPOINT_PREFIX = '# Resuming from a compaction';
+const MODEL_CHANGE = /changed setting Model Selection from ([^\n<]+?) to ([^\n<]+)/;
 const USER_REQUEST = /<USER_REQUEST>([\s\S]*?)<\/USER_REQUEST>/;
 
 export function extractUserRequest(content: string): string {
@@ -70,11 +78,18 @@ export function parseLine(line: string): KeptStep | null {
     }
   }
 
+  if (type === 'CHECKPOINT' && source === 'SYSTEM' && contentStr.startsWith(CHECKPOINT_PREFIX)) {
+    step.compaction = true;
+  }
+
   if (type === 'USER_INPUT' && contentStr) {
+    const mc = MODEL_CHANGE.exec(contentStr);
+    if (mc) step.modelChange = { from: mc[1]!.trim(), to: mc[2]!.trim() };
     // Only the request text counts as context text (labels/sizes only are kept, never the text).
     const req = extractUserRequest(contentStr);
     step.contentLength = req.length;
     step.prompt = req.slice(0, 200);
+    if (/^\/compact(\s|$)/.test(req)) step.compactCommand = true;
     step.promptPreview = req.replace(/\s+/g, ' ').slice(0, 40) + (req.length > 40 ? '…' : '');
   }
 
@@ -137,6 +152,9 @@ export class TranscriptParser {
       lastStepIndex: last ? last.index : null,
       firstPrompt,
       lastActivity: last?.createdAt ?? null,
+      compaction: detectCompaction(this.kept),
+      modelChanges: detectModelChanges(this.kept),
+      lastCheckpoint: lastCheckpointStep(this.kept),
     };
   }
 }

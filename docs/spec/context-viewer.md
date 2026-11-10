@@ -259,7 +259,7 @@ Compaction (manual `/compact` or automatic) is not a distinct gauge state: the g
 **Detection.**
 - Transcript: a step `type: CHECKPOINT`, `source: SYSTEM`, content starting `# Resuming from a compaction`, followed by a summary; carries `checkpoint{includedStepIndexStart/End, sessionSummary, capturedUserRequests}`; automatic ones add `checkpointIndex` 1, 2, 3. Its token counts are the summarizing call's cost: never count toward the gauge.
 - Server: the first call after Compaction has `chatStartMetadata.startStepIndex` = the CHECKPOINT step and `contextWindowMetadata.truncationReason = TRUNCATION_REASON_MAX_TOKEN_LIMIT` (also for manual). DB cross-check: `.1.9.1`.
-- Manual vs automatic: manual iff the step before the CHECKPOINT is a `/compact` user message.
+- Manual vs automatic: manual iff the nearest earlier user message is `/compact` with no planner reply in between (real data has a SYSTEM_MESSAGE step between `/compact` and the CHECKPOINT, 2026-11-09).
 - Model change (not Compaction): `modelChanges` from the per-call model; the billed drop is real and kept.
 
 **Display.**
