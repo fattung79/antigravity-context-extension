@@ -1,22 +1,43 @@
-# Context Viewer
+# Antigravity Context Viewer
 
-View-only Token Gauge and Context Inventory for Antigravity Conversations. Personal use; nothing is published. Spec: `docs/spec/context-viewer.md`.
+View-only Token Gauge and Context Inventory for Antigravity Conversations.
 
 ## What it shows
 
-- Status bar: tokens used vs Threshold for the Active Conversation (and Recent ones, up to `maxConversations`), coloured by band.
-- Activity bar view "Context Inventory": per-Conversation breakdown (sections, chat messages, tools, rules, skills), Compaction markers, hovers with cut-off text.
-- Data comes from this window's language server over loopback (`rpc`), falling back to the transcript and a copy of the SQLite db (`file`).
+- **Status bar Token Gauge**: tokens used vs context limit for the Active Conversation, coloured by traffic-light Threshold band (`🟢` ≤ 50%, `🟡` > 50%, `🟠` > 80%, `🔴` > 100%). Click to reveal the Active Conversation in the sidebar.
+- **Activity bar view "Context Inventory"**: per-Conversation breakdown for the Active Conversation and Recent Conversations (up to `maxConversations`) — System Prompt sections, rule files (`Memory`), Tools, Chat Messages, Compaction checkpoints, and hover previews with cut-off text.
+- **Inspect & Sort**: open any chat message, System Prompt section, or Tool in a read-only viewer (or open rule files directly on disk), and toggle Chat Messages between **Step Order** and **Largest First**.
+- **Dual data source**: queries this window's language server over loopback (`rpc`), falling back automatically to the transcript and a read-only copy of the SQLite db (`file`).
 
 ## Install
 
-```
-npm install
-npm run build
-npm run package        # writes context-viewer-0.1.0.vsix
+### From the Extensions Marketplace
+
+Search for **Antigravity Context Viewer** (`fattung79.antigravity-context-viewer`) in the Extensions view in Antigravity or VS Code, or install from the CLI:
+
+```sh
+# Antigravity
+antigravity --install-extension fattung79.antigravity-context-viewer
+
+# VS Code
+code --install-extension fattung79.antigravity-context-viewer
 ```
 
-Then in Antigravity / VS Code: Extensions -> `...` -> Install from VSIX, or `antigravity --install-extension context-viewer-0.1.0.vsix`. Needs VS Code engine 1.107+; runs on the workspace side (WSL) where the data roots live. Without a configured root on the host it activates quietly and shows an empty welcome.
+### From VSIX / Source
+
+```sh
+npm install
+npm run build
+npm run package        # writes antigravity-context-viewer-0.1.0.vsix
+```
+
+Then in Antigravity / VS Code: **Extensions** → `...` → **Install from VSIX...**, or run:
+
+```sh
+antigravity --install-extension antigravity-context-viewer-0.1.0.vsix
+```
+
+Requires VS Code engine 1.107+; runs on the workspace side (WSL/Linux) where the data roots live. Without a configured root on the host it activates quietly and shows an empty welcome.
 
 ## Settings
 
@@ -39,11 +60,11 @@ Then in Antigravity / VS Code: Extensions -> `...` -> Install from VSIX, or `ant
 - RPC: loopback only, this window's server only, constant Get/List method allowlist; `GetUserStatus` is never called.
 - CSRF token read from `/proc/<pid>/cmdline` (never `environ`), kept in memory, never logged, stored or shown.
 - Logs redact the token, emails and account/plan fields; no headers, bodies or blobs are logged.
-- Any rpc failure falls back to files; any file failure keeps the last good snapshot marked stale. No webviews, no telemetry.
+- Any `rpc` failure falls back to files; any file failure keeps the last good snapshot marked stale. No webviews, no telemetry.
 
 ## Known limits
 
 - Per-rule/per-skill `GetTokenBase` children do not sum to their sections, so only section totals are shown.
 - After a forced close, a leftover `language_server` can interleave step sequences in one transcript; the gauge stays right, running totals and tree may not. End leftover servers.
-- v1 is Linux/WSL host only for server data; Windows-local windows and plain VS Code get no server data (Later: PowerShell lookup, push updates).
+- Currently Linux/WSL host only for language-server RPC discovery; Windows-local windows and plain VS Code use file fallback only.
 - The `node:sqlite` ExperimentalWarning is expected.

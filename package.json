@@ -1,15 +1,26 @@
 {
-  "name": "context-viewer",
-  "displayName": "Context Viewer",
+  "name": "antigravity-context-viewer",
+  "displayName": "Antigravity Context Viewer",
   "description": "View-only Token Gauge and Context Inventory for Antigravity Conversations.",
   "version": "0.1.0",
-  "publisher": "local",
-  "private": true,
+  "publisher": "fattung79",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/fattung79/antigravity-context-extension"
   },
-  "license": "UNLICENSED",
+  "homepage": "https://github.com/fattung79/antigravity-context-extension#readme",
+  "bugs": {
+    "url": "https://github.com/fattung79/antigravity-context-extension/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "antigravity",
+    "context",
+    "tokens",
+    "token-gauge",
+    "ai"
+  ],
   "engines": {
     "vscode": "^1.107.0"
   },
