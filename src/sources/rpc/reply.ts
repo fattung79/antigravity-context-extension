@@ -1,5 +1,6 @@
 import { normaliseModelKey, resolveLimit } from '../../limits';
 import type { Group, Snapshot } from '../../model';
+import { detectCompaction } from '../compaction';
 import { buildBreakdownGroups, type BreakdownGroup } from '../breakdown';
 import type { CompactStep } from '../items';
 import { RpcError } from './client';
@@ -161,7 +162,7 @@ export function buildRpcSnapshot(meta: RpcMeta, ctx: SnapshotContext): Snapshot 
     defaultLimit: ctx.limitDefault,
   });
   const limitSource = r.limitSource;
-  const groups: Group[] = buildBreakdownGroups(meta.breakdown, ctx.steps, r.limit, ctx.heavyPercent);
+  const groups: Group[] = buildBreakdownGroups(meta.breakdown, ctx.steps, r.limit, ctx.heavyPercent, meta.startStepIndex);
   return {
     conversationId: ctx.conversationId,
     title: ctx.title,
@@ -174,7 +175,7 @@ export function buildRpcSnapshot(meta: RpcMeta, ctx: SnapshotContext): Snapshot 
     estimate: meta.estimate,
     groups,
     totals: meta.totals,
-    compaction: null, // slice 6
+    compaction: detectCompaction(ctx.steps),
     modelChanges: meta.modelChanges,
     startStepIndex: meta.startStepIndex,
     truncationReason: meta.truncationReason,

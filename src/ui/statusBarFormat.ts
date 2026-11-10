@@ -39,7 +39,7 @@ export function compactionLines(s: Pick<Snapshot, 'compaction' | 'limit' | 'mode
     out.push(line);
     if (s.limit !== null && s.limit > 0) out.push(`Compacts at ~${formatTokens(s.limit)} (soft limit)`);
   }
-  for (const m of s.modelChanges) out.push(`Model changed at step ${m.step}: ${esc(m.from)} → ${esc(m.to)}`);
+  for (const m of s.modelChanges ?? []) out.push(`Model changed at step ${m.step}: ${esc(m.from)} → ${esc(m.to)}`);
   return out;
 }
 
