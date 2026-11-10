@@ -25,7 +25,7 @@ Yes, for WSL windows, and it is far richer than the transcript. `GetCascadeTraje
 |---|---|---|
 | `GetAllCascadeTrajectories` | yes | `trajectorySummaries` map by cascade id: `summary` (title), `stepCount`, `status`, `createdTime`, `lastModifiedTime`, `lastUserInputTime`, `lastUserInputStepIndex`, `workspaces`, `annotations`, `trajectoryMetadata`, `trajectoryType`, `latestExecutorTerminationReason` |
 | `GetCascadeTrajectoryGeneratorMetadata {cascadeId}` | yes | `generatorMetadata[]`, one per LLM call (see below) |
-| `GetCascadeTrajectoryExecutorMetadatas {cascadeId}` | yes | per execution: `terminationReason`, `numGeneratorInvocations`, `lastStepIdx`, `cascadeConfig` (includes `checkpointConfig`: `maxTokenLimit`, `maxOverheadRatio`, `strategy`), `loadedCustomizations.customizations[]` (type, name, path, scope, status) |
+| `GetCascadeTrajectoryExecutorMetadatas {cascadeId}` | yes | `executorMetadata[]` (singular key; checked live 2026-11-09, ~145 KB), per execution: `terminationReason`, `numGeneratorInvocations`, `lastStepIdx`, `cascadeConfig` (includes `checkpointConfig`: `maxTokenLimit`, `maxOverheadRatio`, `strategy`), `loadedCustomizations.customizations[]` (type, name, path, scope, status) |
 | `GetCascadeTrajectory {cascadeId}` | yes | whole trajectory: `steps[]`, `generatorMetadata[]`, `executorMetadatas[]`, `status`, `numTotalSteps`; about 690 KB for 73 steps |
 | `GetTokenBase {}` | yes | `customizationTokenBase.groups` (TOKEN_TYPE_RULES, SKILLS, SUBAGENTS with per-item `numTokens` and `totalTokens`), `customizationBudget` 20000, `rulesBudget` 20000, remaining budgets |
 | `GetAllRules {}` | yes | `memories[]` entries (e.g. user global AGENTS.md: id, source, scope, `absolutePath`, `discoveryCategory`) |

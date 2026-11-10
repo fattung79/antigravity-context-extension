@@ -90,6 +90,10 @@ export function activate(context: vscode.ExtensionContext): void {
         else if (el.name) ref = { conversationId: el.conversationId, kind: kind === 'tool' ? 'tool' : 'section', name: el.name };
         if (ref) { try { await openContent(ref); } catch (e) { logger.error(`open item failed: ${(e as Error).message}`); } }
       }),
+      vscode.commands.registerCommand('contextViewer.openRuleFile', async (el?: RenderedItem) => {
+        if (el?.type !== 'file' || !el.path || !el.openable) return;
+        try { await vscode.window.showTextDocument(vscode.Uri.file(el.path), { preview: true }); } catch (e) { logger.error('open rule file failed: ' + (e as Error).message); }
+      }),
       vscode.commands.registerCommand('contextViewer.refresh', () => controller.refresh()),
       vscode.commands.registerCommand('contextViewer.reveal', async (conversationId?: unknown) => {
         await vscode.commands.executeCommand('contextViewer.inventory.focus');
