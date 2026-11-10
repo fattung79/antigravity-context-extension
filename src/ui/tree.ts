@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
+import type { Config } from '../config';
 import type { Store, StoreState } from '../model';
+import { levelFor, type Level } from './classify';
 import { nodeUri } from './decorations';
 import {
   buildTreeHierarchy,
@@ -17,7 +19,7 @@ export class ContextInventoryProvider
   private roots: RenderedItem[] = [];
   private byId = new Map<string, RenderedItem>();
 
-  constructor(private store: Store) {
+  constructor(private store: Store, private config: () => Pick<Config, 'threshold' | 'thresholdDefault'>) {
     this.state = store.get();
     this.rebuild();
     store.onChange((s) => {
@@ -68,7 +70,12 @@ export class ContextInventoryProvider
     item.id = element.id;
     item.description = element.description || undefined;
     if (element.tooltip) item.tooltip = element.tooltip;
-    item.resourceUri = nodeUri(element.id, element.heavy === true);
+    let level: Level = 'none';
+    if (element.type === 'conversation') {
+      const snap = this.state.snapshots.find((x) => x.conversationId === element.id);
+      if (snap && !snap.notSelected) level = levelFor(snap, this.config());
+    }
+    item.resourceUri = nodeUri(element.id, element.heavy === true, level);
 
     if (element.type === 'conversation') {
       const color = element.notSelected

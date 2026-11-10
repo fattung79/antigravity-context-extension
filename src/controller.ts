@@ -4,6 +4,7 @@ import {
   existingRoots, listConversations, pickExisting, readSelectedId, readSummaries, resolveTitle, selectActive,
   stateDbCandidates, type ConversationInfo, type SummaryRow,
 } from './discovery';
+import type { RememberedLimits } from './limits';
 import type { Logger } from './logger';
 import type { Store } from './model';
 import { INTERVALS_MS, Poller, sameStat, statKey, type StatKey, type Task } from './poller';
@@ -21,6 +22,8 @@ export interface ControllerDeps {
   workspaceUris: string[];
   /** Hook for a window title when the transcript is unreadable etc. */
   onNoRoot?: (noRoot: boolean) => void;
+  /** Persisted limits seen from server/database. */
+  remembered?: RememberedLimits;
 }
 
 /** Wires discovery + file source + store, driven by the stat poller. Never throws into the host. */
@@ -173,6 +176,7 @@ export class Controller {
         storageDir: this.deps.storageDir,
         limitOverrides: () => cfg().limits,
         limitDefault: () => cfg().limitsDefault,
+        remembered: this.deps.remembered,
         heavyPercent: () => cfg().heavyItemPercent,
         onWarn: (m) => this.deps.logger.error(m),
       });

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { normaliseModelKey, resolveLimit } from '../limits';
+import { normaliseModelKey, resolveLimit, type RememberedLimits } from '../limits';
 import type { Group, GroupItem, Snapshot } from '../model';
 import { decodeGenMetadata, type GenMetadata } from './genMetadata';
 import { buildBreakdownGroups } from './breakdown';
@@ -68,6 +68,7 @@ export interface FileSourceDeps {
   io?: FileIo;
   limitOverrides: () => Record<string, number>;
   limitDefault: () => number | null;
+  remembered?: RememberedLimits;
   heavyPercent?: () => number;
   onWarn?: (msg: string) => void;
 }
@@ -92,10 +93,12 @@ export class FileSource {
     const s = this.parser.summary();
     const modelDisplay = this.meta?.modelDisplay ?? null;
     const modelKey = normaliseModelKey(modelDisplay);
+    this.deps.remembered?.remember(modelKey, this.meta?.limit);
     const { limit, limitSource } = resolveLimit({
       modelKey,
       override: this.deps.limitOverrides(),
       database: this.meta?.limit ?? null,
+      remembered: this.deps.remembered?.all(),
       defaultLimit: this.deps.limitDefault(),
     });
     const heavyPercent = this.deps.heavyPercent?.() ?? 5;

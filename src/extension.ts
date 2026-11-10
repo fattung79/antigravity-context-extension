@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { parseConfig, type Config } from './config';
 import { Controller } from './controller';
 import { Logger } from './logger';
+import { RememberedLimits } from './limits';
 import { Store } from './model';
 import { loadSqlite } from './sources/sqlite';
 import { HeavyDecorationProvider } from './ui/decorations';
@@ -17,8 +18,8 @@ export function activate(context: vscode.ExtensionContext): void {
   let config = readConfig();
   const logger = new Logger(channel, config.logLevel);
   const store = new Store();
-  const statusBar = new StatusBar('contextViewer.reveal');
-  const provider = new ContextInventoryProvider(store);
+  const statusBar = new StatusBar('contextViewer.reveal', () => config);
+  const provider = new ContextInventoryProvider(store, () => config);
   const decorations = new HeavyDecorationProvider();
   const treeView = vscode.window.createTreeView('contextViewer.inventory', {
     treeDataProvider: provider,
@@ -36,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
       config: () => config,
       openDb: loadSqlite(),
       storageDir,
+      remembered: new RememberedLimits(context.globalState),
       storageUriFsPath: context.storageUri?.fsPath,
       workspaceUris: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.toString()),
       onNoRoot: (noRoot) => { void vscode.commands.executeCommand('setContext', 'contextViewer.noRoot', noRoot); },
@@ -53,6 +55,10 @@ export function activate(context: vscode.ExtensionContext): void {
         config = readConfig();
         logger.setLevel(config.logLevel);
         if (e.affectsConfiguration('contextViewer.roots') || e.affectsConfiguration('contextViewer.limits')) controller.configChanged();
+        // Threshold/colour settings: redraw only.
+        statusBar.render(store.get());
+        provider.refresh();
+        decorations.refresh();
       }),
       vscode.commands.registerCommand('contextViewer.refresh', () => controller.refresh()),
       vscode.commands.registerCommand('contextViewer.reveal', async () => {
