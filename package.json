@@ -138,14 +138,39 @@
       {
         "command": "contextViewer.reveal",
         "title": "Context Viewer: Reveal Conversation"
+      },
+      {
+        "command": "contextViewer.toggleLargestFirst",
+        "title": "Context Viewer: Sort Chat Messages Largest First",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "contextViewer.toggleLargestFirst.active",
+        "title": "Context Viewer: Sort Chat Messages by Step Order",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "contextViewer.collapseAll",
+        "title": "Context Viewer: Collapse All",
+        "icon": "$(collapse-all)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "contextViewer.toggleLargestFirst",
+          "when": "view == contextViewer.inventory && !contextViewer.largestFirst",
+          "group": "navigation@1"
+        },
+        {
+          "command": "contextViewer.toggleLargestFirst.active",
+          "when": "view == contextViewer.inventory && contextViewer.largestFirst",
+          "group": "navigation@1"
+        },
+        {
           "command": "contextViewer.refresh",
           "when": "view == contextViewer.inventory",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ]
     }

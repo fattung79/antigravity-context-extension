@@ -4,7 +4,9 @@ import { Controller } from './controller';
 import { Logger } from './logger';
 import { Store } from './model';
 import { loadSqlite } from './sources/sqlite';
+import { HeavyDecorationProvider } from './ui/decorations';
 import { StatusBar } from './ui/statusBar';
+import { ContextInventoryProvider } from './ui/tree';
 
 export function activate(context: vscode.ExtensionContext): void {
   const channel = vscode.window.createOutputChannel('Context Viewer');
@@ -16,6 +18,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const logger = new Logger(channel, config.logLevel);
   const store = new Store();
   const statusBar = new StatusBar('contextViewer.reveal');
+  const provider = new ContextInventoryProvider(store);
+  const decorations = new HeavyDecorationProvider();
+  const treeView = vscode.window.createTreeView('contextViewer.inventory', {
+    treeDataProvider: provider,
+    showCollapseAll: true,
+  });
+  const setLargestFirst = (on: boolean) => { void vscode.commands.executeCommand('setContext', 'contextViewer.largestFirst', on); };
+  setLargestFirst(false);
 
   try {
     const storageDir = (context.globalStorageUri ?? context.storageUri)?.fsPath;
@@ -34,7 +44,9 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
       channel,
       statusBar,
-      store.onChange((s) => statusBar.render(s)),
+      treeView,
+      decorations,
+      store.onChange((s) => { statusBar.render(s); decorations.refresh(); }),
       vscode.window.onDidChangeWindowState((e) => controller.setFocused(e.focused)),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (!e.affectsConfiguration('contextViewer')) return;
@@ -43,7 +55,16 @@ export function activate(context: vscode.ExtensionContext): void {
         if (e.affectsConfiguration('contextViewer.roots') || e.affectsConfiguration('contextViewer.limits')) controller.configChanged();
       }),
       vscode.commands.registerCommand('contextViewer.refresh', () => controller.refresh()),
-      vscode.commands.registerCommand('contextViewer.reveal', () => vscode.commands.executeCommand('contextViewer.inventory.focus')),
+      vscode.commands.registerCommand('contextViewer.reveal', async () => {
+        await vscode.commands.executeCommand('contextViewer.inventory.focus');
+        const root = provider.firstRoot();
+        if (root) {
+          try { await treeView.reveal(root, { select: false, focus: true, expand: true }); } catch { /* view not ready */ }
+        }
+      }),
+      vscode.commands.registerCommand('contextViewer.toggleLargestFirst', () => setLargestFirst(provider.toggleLargestFirst())),
+      vscode.commands.registerCommand('contextViewer.toggleLargestFirst.active', () => setLargestFirst(provider.toggleLargestFirst())),
+      vscode.commands.registerCommand('contextViewer.collapseAll', () => vscode.commands.executeCommand('workbench.actions.treeView.contextViewer.inventory.collapseAll')),
       { dispose: () => controller.dispose() },
     );
     controller.setFocused(vscode.window.state.focused);
@@ -51,7 +72,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar.render(store.get());
   } catch (e) {
     logger.error(`activation failed: ${(e as Error).message}`);
-    context.subscriptions.push(channel, statusBar);
+    context.subscriptions.push(channel, statusBar, treeView, decorations);
   }
 }
 

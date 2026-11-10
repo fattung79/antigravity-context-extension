@@ -3,7 +3,8 @@ import * as path from 'node:path';
 import { normaliseModelKey, resolveLimit } from '../limits';
 import type { Group, GroupItem, Snapshot } from '../model';
 import { decodeGenMetadata, type GenMetadata } from './genMetadata';
-import { buildChatItems, computeBaseline } from './items';
+import { buildBreakdownGroups } from './breakdown';
+import { buildChatItems, computeBaseline, isHeavy } from './items';
 import { DbCopier, type OpenDb } from './sqlite';
 import { TranscriptParser } from './transcript';
 
@@ -97,33 +98,11 @@ export class FileSource {
       database: this.meta?.limit ?? null,
       defaultLimit: this.deps.limitDefault(),
     });
-    const chatItems = buildChatItems(this.parser.kept);
-    const heavyThreshold = limit !== null ? limit * ((this.deps.heavyPercent?.() ?? 5) / 100) : Infinity;
-    const chatChildren: GroupItem[] = chatItems.map((ci) => ({
-      label: ci.label,
-      tokens: ci.tokens,
-      step: ci.step,
-      kind: ci.kind,
-      estimated: true,
-      heavy: ci.tokens >= heavyThreshold,
-    }));
-    const chatTotal = chatChildren.reduce((a, b) => a + b.tokens, 0);
-    const baselineTokens = computeBaseline(s.used, chatItems);
-
-    const groups: Group[] = [
-      {
-        name: 'Baseline',
-        tokens: baselineTokens,
-        estimated: true,
-        children: [],
-      },
-      {
-        name: 'Chat Messages',
-        tokens: chatTotal,
-        estimated: true,
-        children: chatChildren,
-      },
-    ];
+    const heavyPercent = this.deps.heavyPercent?.() ?? 5;
+    const breakdown = this.meta?.breakdown ?? null;
+    const groups: Group[] = breakdown
+      ? buildBreakdownGroups(breakdown, this.parser.kept, limit, heavyPercent)
+      : this.estimatedGroups(s.used, limit, heavyPercent);
 
     return {
       conversationId: this.conversationId,
@@ -143,6 +122,23 @@ export class FileSource {
       notSelected: base.notSelected,
       role: base.role,
     };
+  }
+
+  /** File mode without db breakdown: Baseline (~est) + Chat Messages (~est). */
+  private estimatedGroups(used: number | null, limit: number | null, heavyPercent: number): Group[] {
+    const chatItems = buildChatItems(this.parser.kept);
+    const children: GroupItem[] = chatItems.map((ci) => ({
+      label: ci.label,
+      tokens: ci.tokens,
+      step: ci.step,
+      kind: ci.kind,
+      estimated: true,
+      heavy: isHeavy(ci.tokens, limit, heavyPercent),
+    }));
+    return [
+      { name: 'Baseline', tokens: computeBaseline(used, chatItems), estimated: true, children: [] },
+      { name: 'Chat Messages', tokens: children.reduce((a, b) => a + b.tokens, 0), estimated: true, children },
+    ];
   }
 
   private refreshMeta(): void {

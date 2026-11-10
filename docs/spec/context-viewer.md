@@ -130,7 +130,7 @@ Both sources produce the same `Snapshot` type (section 6). Source is shown as `r
 - Model for a Conversation with no `gen_metadata` rows: `last_selected_agent_model` in `~/.gemini/antigravity/antigravity_state.pbtxt` (global).
 - Do NOT use `antigravity_stats_cache.json` (stale, inconsistent) or the `trajectorySummaries` key in the global `state.vscdb` (stale protobuf index).
 
-**Tree in file mode.** Same tree as `rpc`: System Prompt / Tools / Chat Messages with exact counts from the db breakdown if read; otherwise Baseline + Chat Messages, all `~est`. Trailing `~` on the status bar figure.
+**Tree in file mode.** Same tree as `rpc`: System Prompt / Tools / Chat Messages with Antigravity's counts from the db breakdown if read (see section 7.2 on how they relate to the gauge); otherwise Baseline + Chat Messages, all `~est`. Trailing `~` on the status bar figure.
 
 Why: [What can the language server's RPC tell us, and can we reach it reliably?](../../wayfinder/context-viewer/13-language-server-rpc.md), [Files only, or language-server RPC with files as fallback?](../../wayfinder/context-viewer/14-data-source-strategy.md), [How do the data sources, watching, parsing and UI fit together?](../../wayfinder/context-viewer/15-architecture.md), [What do transcripts contain, and how do they map to Context Items?](../../wayfinder/context-viewer/03-transcript-format.md), [Which .gemini data store is the best source for titles, model and tokens?](../../wayfinder/context-viewer/09-gemini-data-stores.md), [Which kinds of Context Item does the inventory show, and how are they grouped?](../../wayfinder/context-viewer/05-context-item-taxonomy.md), [What do the gauge and inventory show when Antigravity compacts or drops earlier context?](../../wayfinder/context-viewer/16-compaction.md); research: [language-server-rpc](../research/language-server-rpc.md), [transcript-format](../research/transcript-format.md), [gemini-data-stores](../research/gemini-data-stores.md), [gauge-figure-check](../research/gauge-figure-check.md).
 
@@ -226,12 +226,13 @@ Threshold lookup: `threshold["<model key>"]` > `threshold.default` (150) > the m
 ### 7.2 Tree (`ui/tree`)
 - One view, **Context Inventory**, in its own activity-bar container. Each Conversation is a root: Active first, expanded; Recent after, collapsed; cap `maxConversations`.
 - Root label = title; description `62% · 159k/256k · rpc`; Recent adds `· drops in 2m`; compacted adds `· compacted`; `notSelected` adds `· not selected` with a greyed (disabled foreground) icon.
-- Children of a root: groups **System Prompt**, **Tools**, **Chat Messages** (exact counts in `rpc`/db mode). File mode without db: **Baseline** (`~est`) + **Chat Messages** (`~est`).
+- Children of a root: groups **System Prompt**, **Tools**, **Chat Messages** (Antigravity's own counts in `rpc`/db mode). File mode without db: **Baseline** (`~est`) + **Chat Messages** (`~est`).
+- **Breakdown vs gauge.** The breakdown sums exactly to Antigravity's estimate (`estimatedTokensUsed` / `.1.9.10.1`), not to the billed gauge figure (checked on 6 Conversations, 2026-11-09: e.g. billed 14,086 vs breakdown 19,670; 89,700 vs 92,241). Groups are not rescaled. The root description adds `· breakdown 19.7k (Antigravity est.)` when the breakdown is shown, and the root tooltip explains the difference.
 - System Prompt: one child per named section (identity, ..., `user_rules`, `skills`, `user_information`, ...). Tools: one child per tool. Per-rule/per-skill children only if confirmed to add up (section 4.1).
 - Chat Messages: time (step) order by default, one item per Step, tool call + result merged (counts added). Label `#<step> <tool or kind> <target> · <tokens>`, e.g. `#42 view_file src/foo.ts · 3.1k`; user messages: `#<step> ` + first ~40 chars. Kind shown as an icon (section 4.2 kinds). In file mode counts carry `~`.
 - Items > `heavyItemPercent` of the Context window: tinted in the error colour. Tinting goes through a `FileDecorationProvider` on a synthetic `resourceUri` (`ui/decorations`); native trees cannot colour labels otherwise. "Dimmed" = theme disabled foreground (no opacity).
 - Title buttons: **largest first** (toggle, Chat Messages only), **refresh**, **collapse all**.
-- Token display: `3.1k`, `159k`; exact where `rpc`/db, `~Nk` where estimated.
+- Token display: `3.1k`, `159k`; no `~` where they come from Antigravity's breakdown (`rpc`/db), `~Nk` where estimated from text.
 
 ### 7.3 Item data for the tree in `rpc` mode
 Chat Messages children come from the breakdown names `"<stepIndex>: <STEP_TYPE>"`; labels (tool name, target, first prompt chars) are joined from the transcript by step index (read once per change, labels only). Merge a tool call with its result by position.

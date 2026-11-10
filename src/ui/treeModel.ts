@@ -3,9 +3,12 @@ import { formatTokens } from './statusBarFormat';
 
 export interface RenderedItem {
   id: string;
+  /** Id of the parent node (undefined for roots); used for reveal. */
+  parentId?: string;
   type: 'conversation' | 'group' | 'item';
   label: string;
   description: string;
+  tooltip?: string;
   kind?: string;
   tokens?: number;
   estimated?: boolean;
@@ -28,6 +31,19 @@ export function sortChatItems(items: GroupItem[], largestFirst: boolean): GroupI
   return [...items].sort((a, b) => b.tokens - a.tokens);
 }
 
+/** Sum of Antigravity's own breakdown (exact groups only), or null in ~est mode. */
+export function breakdownTotal(snap: Snapshot): number | null {
+  if (snap.groups.length === 0 || snap.groups.some((g) => g.estimated)) return null;
+  return snap.groups.reduce((a, g) => a + g.tokens, 0);
+}
+
+export function buildConversationTooltip(snap: Snapshot): string | undefined {
+  const b = breakdownTotal(snap);
+  if (b === null || snap.used === null) return undefined;
+  return `Gauge ${formatTokens(snap.used)} = billed input + cached tokens of the last call. ` +
+    `Groups are Antigravity's own count (${formatTokens(b)}), which differs from billed.`;
+}
+
 export function buildConversationDescription(snap: Snapshot): string {
   const parts: string[] = [];
 
@@ -39,6 +55,9 @@ export function buildConversationDescription(snap: Snapshot): string {
   }
 
   parts.push(snap.source);
+
+  const b = breakdownTotal(snap);
+  if (b !== null) parts.push(`breakdown ${formatTokens(b)} (Antigravity est.)`);
 
   if (snap.compaction) {
     parts.push('compacted');
@@ -60,10 +79,10 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean)
       }
 
       const children: RenderedItem[] = rawChildren.map((item, idx) => ({
-        id: `${snap.conversationId}/${g.name}/${item.step ?? idx}/${item.label}`,
+        id: `${snap.conversationId}/${g.name}/${idx}/${item.step ?? ''}/${item.label}`,
         type: 'item',
-        label: item.label,
-        description: formatItemTokens(item.tokens, item.estimated),
+        label: `${item.label} · ${formatItemTokens(item.tokens, item.estimated)}`,
+        description: '',
         kind: item.kind,
         tokens: item.tokens,
         estimated: item.estimated,
@@ -81,11 +100,17 @@ export function buildTreeHierarchy(snapshots: Snapshot[], largestFirst: boolean)
       };
     });
 
+    for (const g of groups) {
+      g.parentId = snap.conversationId;
+      for (const c of g.children ?? []) c.parentId = g.id;
+    }
+
     return {
       id: snap.conversationId,
       type: 'conversation',
       label: snap.title,
       description: buildConversationDescription(snap),
+      tooltip: buildConversationTooltip(snap),
       role: snap.role,
       notSelected: snap.notSelected,
       children: groups,
