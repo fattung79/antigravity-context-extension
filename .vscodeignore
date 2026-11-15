@@ -1,0 +1,8 @@
+**
+!dist/extension.js
+!media/**
+!package.json
+!README.md
+!CHANGELOG.md
+!LICENSE
+# Excluded by the catch-all above: src/ test/ docs/ wayfinder/ node_modules/ maps/ *.map tsconfig esbuild.mjs

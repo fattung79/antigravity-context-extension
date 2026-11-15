@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Floating cubes above -->
+  <rect x="11.1" y="1.4" width="1.8" height="1.8" rx="0.2" fill="currentColor" stroke="none"/>
+  <rect x="7.6" y="3.3" width="1.7" height="1.7" rx="0.2" fill="currentColor" stroke="none"/>
+  <rect x="14.7" y="3.3" width="1.7" height="1.7" rx="0.2" fill="currentColor" stroke="none"/>
+  <rect x="11.0" y="4.8" width="2.0" height="2.0" rx="0.2" fill="currentColor" stroke="none"/>
+  <!-- Isometric cube -->
+  <path d="M12 7.5 L19.5 11.2 L19.5 18.8 L12 22.5 L4.5 18.8 L4.5 11.2 Z" stroke-width="1.35"/>
+  <path d="M4.5 11.2 L12 14.9 L19.5 11.2 M12 14.9 L12 22.5" stroke-width="1.35"/>
+  <!-- AGY on left face -->
+  <path d="M5.25 17.0 L6.15 13.7 L7.05 17.9 M5.65 15.8 L6.65 16.3" stroke-width="1.05"/>
+  <path d="M9.0 15.4 L7.7 14.5 L7.7 18.2 L9.1 18.9 L9.1 17.2 L8.4 16.8" stroke-width="1.05"/>
+  <path d="M9.6 15.4 L10.4 17.8 L11.2 16.2 M10.4 17.8 L10.4 19.5" stroke-width="1.05"/>
+  <!-- <> on right face -->
+  <path d="M15.15 15.2 L13.35 17.9 L15.15 18.8" stroke-width="1.15"/>
+  <path d="M16.35 14.6 L18.15 15.5 L16.35 18.2" stroke-width="1.15"/>
+</svg>

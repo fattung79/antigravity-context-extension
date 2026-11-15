@@ -1,0 +1,265 @@
+{
+  "name": "antigravity-context-viewer",
+  "displayName": "Antigravity Context Viewer",
+  "description": "View-only Token Gauge and Context Inventory for Antigravity Conversations.",
+  "version": "0.1.1",
+  "publisher": "fattung79",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fattung79/antigravity-context-extension"
+  },
+  "homepage": "https://github.com/fattung79/antigravity-context-extension#readme",
+  "bugs": {
+    "url": "https://github.com/fattung79/antigravity-context-extension/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "antigravity",
+    "context",
+    "tokens",
+    "token-gauge",
+    "ai"
+  ],
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Context Viewer",
+      "properties": {
+        "contextViewer.roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "~/.gemini/antigravity/"
+          ],
+          "markdownDescription": "Data roots to scan (each has `brain/`, `conversations/`, `annotations/`, `conversation_summaries.db`). `~` is expanded."
+        },
+        "contextViewer.maxConversations": {
+          "type": "number",
+          "minimum": 1,
+          "default": 3,
+          "description": "Caps the Conversations shown in the tree, counting the Active Conversation. The status bar shows the Active Conversation only."
+        },
+        "contextViewer.recentExpiryMinutes": {
+          "type": "number",
+          "default": 3,
+          "description": "A Recent Conversation is dropped this many minutes after it entered the Recent list."
+        },
+        "contextViewer.threshold": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": 150,
+          "minimum": 1,
+          "maximum": 10000,
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `150` for 150,000, not `150000`.\n\nSets the traffic-light colour from the context **actually used**: 🟢 up to 50% of the Threshold, 🟡 above 50%, 🟠 above 80%, 🔴 above 100%. Independent of the model's Context window, so you can be warned well before the model's maximum. Applies to every model not listed in `#contextViewer.thresholdPerModel#`. Clear it to use each model's Context window as its Threshold."
+        },
+        "contextViewer.thresholdPerModel": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "markdownDescription": "**Unit: thousands of tokens (k).** Threshold for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 190 }`. Sets the traffic-light colour like `#contextViewer.threshold#`, which applies to models not listed here."
+        },
+        "contextViewer.contextWindow": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "minimum": 1,
+          "markdownDescription": "**Unit: thousands of tokens (k).** Enter `256` for 256,000, not `256000`.\n\nThe model's **maximum** context: the denominator of the status bar figures (`62% · 159k/256k`) and of the heavy-item %. Does not change the colours (see `#contextViewer.threshold#`). Last resort: used only when neither `#contextViewer.contextWindowPerModel#`, Antigravity, nor a built-in value knows the model's window. Empty: no limit known.",
+          "maximum": 10000
+        },
+        "contextViewer.contextWindowPerModel": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "markdownDescription": "**Unit: thousands of tokens (k).** The model's maximum context for specific models, keyed by model name without the effort level, e.g. `{ \"Gemini 3.8 Flash\": 256 }`. Takes precedence over what Antigravity reports. Does not change the colours."
+        },
+        "contextViewer.heavyItemPercent": {
+          "type": "number",
+          "default": 5,
+          "description": "Chat Messages items above this % of the Context window are highlighted."
+        },
+        "contextViewer.hoverChars": {
+          "type": "number",
+          "default": 2000,
+          "description": "Hover cut-off for chat item text: head 75%, tail 25%; thinking budget 50%."
+        },
+        "contextViewer.logLevel": {
+          "type": "string",
+          "enum": [
+            "off",
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "error",
+          "markdownDescription": "How much is written to the **Context Viewer** Output panel (View → Output). Display is unaffected. `off`: nothing. `error`: failures only. `info`: also data-source switches (`rpc` ↔ `file`, server found or lost). `debug`: also every poll hit and RPC call timing. Lines are redacted (tokens, emails, account fields).",
+          "enumDescriptions": [
+            "Nothing",
+            "Failures only",
+            "Failures + data-source switches",
+            "Everything, incl. each poll and RPC call"
+          ]
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "contextViewer",
+          "title": "Context Viewer",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "contextViewer": [
+        {
+          "id": "contextViewer.inventory",
+          "name": "Context Inventory"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "contextViewer.inventory",
+        "contents": "No configured data root was found on this host. Set [contextViewer.roots](command:workbench.action.openSettings?%5B%22contextViewer.roots%22%5D).",
+        "when": "contextViewer.noRoot"
+      },
+      {
+        "view": "contextViewer.inventory",
+        "contents": "Open or start a Conversation in the agent panel.\n[Refresh](command:contextViewer.refresh)",
+        "when": "!contextViewer.noRoot"
+      }
+    ],
+    "commands": [
+      {
+        "command": "contextViewer.refresh",
+        "title": "Context Viewer: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "contextViewer.reveal",
+        "title": "Context Viewer: Reveal Conversation"
+      },
+      {
+        "command": "contextViewer.toggleLargestFirst",
+        "title": "Context Viewer: Sort Chat Messages Largest First",
+        "icon": "$(sort-precedence)"
+      },
+      {
+        "command": "contextViewer.toggleLargestFirst.active",
+        "title": "Context Viewer: Sort Chat Messages by Step Order",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "contextViewer.collapseAll",
+        "title": "Context Viewer: Collapse All",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "contextViewer.openItem",
+        "title": "Context Viewer: Open item content",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "contextViewer.openRuleFile",
+        "title": "Context Viewer: Open rule file",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "contextViewer.openItem",
+          "when": "false"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "contextViewer.openItem",
+          "when": "view == contextViewer.inventory && viewItem =~ /^(chat|section|tool)$/",
+          "group": "inline"
+        },
+        {
+          "command": "contextViewer.openItem",
+          "when": "view == contextViewer.inventory && viewItem =~ /^(chat|section|tool)$/",
+          "group": "navigation"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
+          "when": "view == contextViewer.inventory && viewItem == ruleFile",
+          "group": "inline"
+        },
+        {
+          "command": "contextViewer.openRuleFile",
+          "when": "view == contextViewer.inventory && viewItem == ruleFile",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "contextViewer.toggleLargestFirst",
+          "when": "view == contextViewer.inventory && !contextViewer.largestFirst",
+          "group": "navigation@1"
+        },
+        {
+          "command": "contextViewer.toggleLargestFirst.active",
+          "when": "view == contextViewer.inventory && contextViewer.largestFirst",
+          "group": "navigation@1"
+        },
+        {
+          "command": "contextViewer.refresh",
+          "when": "view == contextViewer.inventory",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/vscode": "^1.107.0",
+    "@vscode/vsce": "^4.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

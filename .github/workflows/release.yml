@@ -1,0 +1,31 @@
+name: Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Package VSIX
+        run: npx vsce package -o release.vsix
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --packagePath release.vsix -p "${{ secrets.VS_MARKETPLACE_TOKEN }}"
+
+      - name: Publish to Open VSX (Antigravity)
+        run: npx ovsx publish release.vsix -p "${{ secrets.OPEN_VSX_TOKEN }}"
