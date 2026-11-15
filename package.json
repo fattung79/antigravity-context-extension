@@ -2,7 +2,7 @@
   "name": "antigravity-context-viewer",
   "displayName": "Antigravity Context Viewer",
   "description": "View-only Token Gauge and Context Inventory for Antigravity Conversations.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "fattung79",
   "icon": "media/icon.png",
   "repository": {

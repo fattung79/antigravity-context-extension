@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Replace the stock activity bar icon with a monochrome SVG matching the extension icon.
+
 ## 0.1.0
 
 - Token Gauge status bar item (Active Conversation) and Context Inventory tree (Active and Recent Conversations).
