@@ -11,8 +11,14 @@ export interface GroupItem {
   resultStep?: number;
 }
 
+/** How a breakdown group behaves: chat steps, tool entries, openable prompt sections, or the ~est Baseline. */
+export type GroupRole = 'chat' | 'tools' | 'section' | 'baseline';
+
 export interface Group {
   name: string;
+  role: GroupRole;
+  /** Raw token-type tag (e.g. TOKEN_TYPE_TOOLS) when the source provides one. */
+  type?: string;
   tokens: number;
   estimated?: boolean;
   children: GroupItem[];
@@ -28,7 +34,7 @@ export interface Snapshot {
   limit: number | null; limitSource: string;
   modelKey: string | null; modelDisplay: string | null;
   estimate: number | null;       // Antigravity's own estimate (tooltip)
-  groups: Group[];               // System Prompt/Tools/Chat Messages, or Baseline + Chat Messages (~est)
+  groups: Group[];               // breakdown groups (System Prompt, Tools, Rules, Skills, Subagents, Plugins, Chat Messages...), or Baseline + Chat Messages (~est)
   totals: { input: number; cacheRead: number; output: number; calls: number };
   compaction: { count: number; manual: number; lastStep?: number; was?: number } | null;
   modelChanges: { step: number; from: string; to: string }[];

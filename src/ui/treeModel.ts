@@ -1,6 +1,6 @@
 import * as os from 'node:os';
 import * as posix from 'node:path/posix';
-import type { Group, GroupItem, RuleFile, Snapshot } from '../model';
+import type { Group, GroupItem, GroupRole, RuleFile, Snapshot } from '../model';
 import { countdownText } from '../recent';
 import { formatTokens } from './statusBarFormat';
 
@@ -24,6 +24,7 @@ export interface RenderedItem {
   /** Hover lookup keys (no text is stored). */
   conversationId?: string;
   groupName?: string;
+  groupRole?: GroupRole;
   step?: number;
   call?: number;
   resultStep?: number;
@@ -124,7 +125,7 @@ export function buildTreeHierarchy(
   return snapshots.map((snap) => {
     const groups: RenderedItem[] = snap.groups.map((g) => {
       let rawChildren = g.children;
-      if (g.name === 'Chat Messages') {
+      if (g.role === 'chat') {
         rawChildren = sortChatItems(g.children, largestFirst);
       }
 
@@ -140,6 +141,7 @@ export function buildTreeHierarchy(
         heavy: item.heavy,
         conversationId: snap.conversationId,
         groupName: g.name,
+        groupRole: g.role,
         step: item.step,
         call: item.call,
         resultStep: item.resultStep,
@@ -154,6 +156,7 @@ export function buildTreeHierarchy(
         tokens: g.tokens,
         estimated: g.estimated,
         children,
+        groupRole: g.role,
       };
     });
 
@@ -161,7 +164,7 @@ export function buildTreeHierarchy(
       g.parentId = snap.conversationId;
       for (const c of g.children ?? []) {
         c.parentId = g.id;
-        if (g.label === 'System Prompt' && c.name === 'user_rules' && snap.ruleFiles?.length) {
+        if (g.groupRole === 'section' && c.name === 'user_rules' && snap.ruleFiles?.length) {
           c.children = snap.ruleFiles.map((f) => ruleFileItem(f, c.id, snap.conversationId, home, roots));
         }
       }
@@ -178,4 +181,38 @@ export function buildTreeHierarchy(
       children: groups,
     };
   });
+}
+
+/** contextValue for items that support Open: chat (one step), section (any prompt-section group), tool. */
+export function openKindOf(e: RenderedItem): 'chat' | 'section' | 'tool' | undefined {
+  if (e.type !== 'item') return undefined;
+  if (e.groupRole === 'chat' && e.step !== undefined) return 'chat';
+  if (e.groupRole === 'section' && e.kind === 'section' && e.name) return 'section';
+  if (e.groupRole === 'tools' && e.kind === 'tool' && e.name) return 'tool';
+  return undefined;
+}
+
+const SECTION_ICONS: Record<string, string> = {
+  'System Prompt': 'gear', Rules: 'law', Skills: 'mortar-board', Subagents: 'hubot', Plugins: 'extensions',
+};
+
+/** Group icon by role; section groups by label with a generic fallback (always set, so no folder icon). */
+export function groupIcon(e: Pick<RenderedItem, 'groupRole' | 'label'>): string {
+  switch (e.groupRole) {
+    case 'baseline': return 'layers';
+    case 'chat': return 'history';
+    case 'tools': return 'tools';
+    default: return SECTION_ICONS[e.label] ?? 'symbol-namespace';
+  }
+}
+
+const SECTION_COLORS: Record<string, string> = {
+  'System Prompt': 'charts.blue', Subagents: 'charts.purple', Skills: 'charts.yellow', Plugins: 'charts.green', Rules: 'charts.red',
+};
+
+/** Theme colour id tinting the group icon; undefined = default foreground (chat, baseline, unknown sections). */
+export function groupIconColor(e: Pick<RenderedItem, 'groupRole' | 'label'>): string | undefined {
+  if (e.groupRole === 'tools') return 'charts.orange';
+  if (e.groupRole === 'section') return SECTION_COLORS[e.label];
+  return undefined;
 }

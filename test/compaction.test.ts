@@ -117,7 +117,7 @@ describe('tree after compaction', () => {
   });
   it('root description says compacted; summary item label', () => {
     expect(buildConversationDescription(base)).toContain('compacted');
-    const root = buildTreeHierarchy([{ ...base, groups: [{ name: 'Chat Messages', tokens: 1503, children: [{ label: '#211 Compaction summary', tokens: 1503, step: 211, kind: 'compaction' }] }] }], false)[0]!;
+    const root = buildTreeHierarchy([{ ...base, groups: [{ name: 'Chat Messages', role: 'chat', tokens: 1503, children: [{ label: '#211 Compaction summary', tokens: 1503, step: 211, kind: 'compaction' }] }] }], false)[0]!;
     expect(root.children![0]!.children![0]!.label).toBe('#211 Compaction summary · 1.5k');
   });
 });

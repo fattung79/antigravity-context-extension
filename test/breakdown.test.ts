@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBreakdownGroups, decodeBreakdown, parseStepName } from '../src/sources/breakdown';
+import { buildBreakdownGroups, decodeBreakdown, groupRole, parseStepName } from '../src/sources/breakdown';
 import { decodeGenMetadata } from '../src/sources/genMetadata';
 import type { CompactStep } from '../src/sources/items';
 
@@ -90,5 +90,43 @@ describe('buildBreakdownGroups (breakdown + transcript join)', () => {
 
   it('flags heavy items above the percent of the limit', () => {
     expect(groups[2]!.children.filter((c) => c.heavy).map((c) => c.step)).toEqual([1, 5]);
+  });
+});
+
+describe('group type + role', () => {
+  const typed = (name: string, type: number | null, kids: [string, number][]) =>
+    lf(1, [...sf(1, name), ...(type === null ? [] : vf(2, type)), ...vf(4, 10), ...kids.flatMap(([n, t]) => child(n, t))]);
+  const wrap = (groups: number[]) => Uint8Array.from(lf(1, lf(9, lf(10, lf(3, groups)))));
+
+  it('decodeBreakdown reads field 2 as a type tag', () => {
+    const b = decodeBreakdown(wrap([
+      ...typed('System Prompt', 1, []), ...typed('Tools', 2, []), ...typed('Chat Messages', 7, []),
+      ...typed('Skills', 5, []), ...typed('Misc', null, []),
+    ]))!;
+    expect(b.map((g) => g.type)).toEqual([
+      'TOKEN_TYPE_SYSTEM_PROMPT', 'TOKEN_TYPE_TOOLS', 'TOKEN_TYPE_CHAT', 'TOKEN_TYPE_5', undefined,
+    ]);
+  });
+
+  it('groupRole: type wins over name', () => {
+    expect(groupRole({ name: 'Whatever', type: 'TOKEN_TYPE_CHAT', tokens: 1, children: [] })).toBe('chat');
+    expect(groupRole({ name: 'Chat Messages', type: 'TOKEN_TYPE_TOOLS', tokens: 1, children: [] })).toBe('tools');
+  });
+  it('groupRole: name fallback, shape fallback, unknown -> section', () => {
+    expect(groupRole({ name: 'Chat Messages', tokens: 1, children: [] })).toBe('chat');
+    expect(groupRole({ name: 'Tools', tokens: 1, children: [] })).toBe('tools');
+    expect(groupRole({ name: 'Renamed', tokens: 1, children: [{ name: '3: USER_INPUT', tokens: 1 }] })).toBe('chat');
+    expect(groupRole({ name: 'Renamed', tokens: 1, children: [{ name: '3: USER_INPUT', tokens: 1 }, { name: 'x', tokens: 1 }] })).toBe('section');
+    expect(groupRole({ name: 'Rules', type: 'TOKEN_TYPE_3', tokens: 1, children: [{ name: 'user_rules', tokens: 1 }] })).toBe('section');
+    expect(groupRole({ name: 'New', type: 'TOKEN_TYPE_42', tokens: 1, children: [] })).toBe('section');
+  });
+  it('buildBreakdownGroups sets role/type', () => {
+    const bd = [
+      { name: 'Rules', type: 'TOKEN_TYPE_3', tokens: 5, children: [{ name: 'user_rules', tokens: 5 }] },
+      { name: 'Z', type: 'TOKEN_TYPE_42', tokens: 1, children: [] },
+    ];
+    const g = buildBreakdownGroups(bd, [], null, 20);
+    expect(g[0]).toMatchObject({ role: 'section', type: 'TOKEN_TYPE_3' });
+    expect(g[0]!.children[0]).toMatchObject({ kind: 'section' });
   });
 });

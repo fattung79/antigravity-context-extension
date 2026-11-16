@@ -52,7 +52,7 @@ function parseBreakdown(tb: unknown): BreakdownGroup[] | null {
         children.push({ name: c.name, tokens: int(c.numTokens, 'child numTokens', 0)! });
       }
     }
-    out.push({ name: g.name, tokens: int(g.numTokens, 'group numTokens', 0)!, children });
+    out.push({ name: g.name, ...(typeof g.type === 'string' ? { type: g.type } : {}), tokens: int(g.numTokens, 'group numTokens', 0)!, children });
   }
   return out;
 }

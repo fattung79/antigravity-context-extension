@@ -9,7 +9,7 @@ export interface GenMetadata {
   limit: number | null;
   estimate: number | null;
   startStepIndex: number | null;
-  /** System Prompt / Tools / Chat Messages with exact counts (.1.9.10.3.1[]); null if absent. */
+  /** Token-breakdown groups (System Prompt, Tools, Rules, Skills, Subagents, Plugins, Chat Messages) with exact counts (.1.9.10.3.1[]); null if absent. */
   breakdown: BreakdownGroup[] | null;
 }
 

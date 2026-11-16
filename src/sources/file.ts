@@ -176,8 +176,8 @@ export class FileSource {
       heavy: isHeavy(ci.tokens, limit, heavyPercent),
     }));
     return [
-      { name: 'Baseline', tokens: computeBaseline(used, chatItems), estimated: true, children: [] },
-      { name: 'Chat Messages', tokens: children.reduce((a, b) => a + b.tokens, 0), estimated: true, children },
+      { name: 'Baseline', role: 'baseline', tokens: computeBaseline(used, chatItems), estimated: true, children: [] },
+      { name: 'Chat Messages', role: 'chat', tokens: children.reduce((a, b) => a + b.tokens, 0), estimated: true, children },
     ];
   }
 

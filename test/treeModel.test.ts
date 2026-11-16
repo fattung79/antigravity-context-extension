@@ -6,6 +6,9 @@ import {
   buildConversationTooltip,
   buildTreeHierarchy,
   formatItemTokens,
+  groupIcon,
+  groupIconColor,
+  openKindOf,
   sortChatItems,
 } from '../src/ui/treeModel';
 
@@ -99,13 +102,14 @@ describe('buildTreeHierarchy', () => {
       estimate: null,
       groups: [
         {
-          name: 'Baseline',
+          name: 'Baseline', role: 'baseline',
           tokens: 4000,
           estimated: true,
           children: [],
         },
         {
           name: 'Chat Messages',
+          role: 'chat',
           tokens: 1000,
           estimated: true,
           children: [
@@ -171,7 +175,7 @@ describe('rule file children', () => {
   const snap = (ruleFiles?: Snapshot['ruleFiles']): Snapshot => ({
     conversationId: 'c1', title: 't', source: 'rpc', used: 1, limit: 10, limitSource: 'server',
     modelKey: null, modelDisplay: null, estimate: null,
-    groups: [{ name: 'System Prompt', tokens: 10, children: [
+    groups: [{ name: 'System Prompt', role: 'section', tokens: 10, children: [
       { label: 'user_rules', tokens: 5, kind: 'section' }, { label: 'skills', tokens: 5, kind: 'section' },
     ] }],
     totals: { input: 0, cacheRead: 0, output: 0, calls: 0 }, compaction: null, modelChanges: [],
@@ -206,5 +210,35 @@ describe('rule file children', () => {
     expect(ur.parentId).toBe('c1/System Prompt');
     expect(ur.children![0]!.parentId).toBe(ur.id);
     expect(roots[0]!.children![0]!.parentId).toBe('c1');
+  });
+});
+
+describe('Rules group (role-based)', () => {
+  const snap = {
+    conversationId: 'c1', title: 't', source: 'rpc', used: 1, limit: 10, limitSource: 'server',
+    modelKey: null, modelDisplay: null, estimate: null,
+    groups: [
+      { name: 'Rules', role: 'section', type: 'TOKEN_TYPE_3', tokens: 5, children: [{ label: 'user_rules', tokens: 5, kind: 'section' }] },
+      { name: 'Mystery', role: 'section', tokens: 1, children: [] },
+    ],
+    totals: { input: 0, cacheRead: 0, output: 0, calls: 0 }, compaction: null, modelChanges: [],
+    startStepIndex: null, notSelected: false, role: 'active', ruleFiles: [{ path: '/x/AGENTS.md', scope: 'workspace' }],
+  } as Snapshot;
+  const roots = buildTreeHierarchy([snap], false, 0, '/home/u', []);
+  const rules = roots[0]!.children![0]!;
+
+  it('section item in Rules is openable and gets rule files', () => {
+    const ur = rules.children![0]!;
+    expect(openKindOf(ur)).toBe('section');
+    expect(ur.children!.map((c) => c.label)).toEqual(['AGENTS.md']);
+  });
+  it('group icons by role, fallback for unknown', () => {
+    expect(groupIcon(rules)).toBe('law');
+    expect(groupIcon(roots[0]!.children![1]!)).toBe('symbol-namespace');
+    expect(groupIcon({ groupRole: 'chat', label: 'x' })).toBe('history');
+    expect(groupIconColor(rules)).toBe('charts.red');
+    expect(groupIconColor({ groupRole: 'tools', label: 'Tools' })).toBe('charts.orange');
+    expect(groupIconColor({ groupRole: 'section', label: 'Brand New' })).toBeUndefined();
+    expect(groupIconColor({ groupRole: 'chat', label: 'Chat Messages' })).toBeUndefined();
   });
 });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- Support Antigravity's split token breakdown (Subagents, Skills, Plugins, Rules groups): items open again, rule files show under `user_rules`, groups get theme-tinted icons.
+- Classify groups by their type tag (with name/shape fallback) so future new groups default to openable sections.
+
 ## 0.1.1
 
 - Replace the stock activity bar icon with a monochrome SVG matching the extension icon.

@@ -2,7 +2,7 @@
  * Pure "Open item content" builders and URI codec (no vscode import).
  *
  * Request-snapshot field paths inside a gen_metadata `data` blob (spec 4.2), found 2026-11-09:
- *   .1.16[] = System Prompt section {1 name, 2 text}   (name == breakdown child name, e.g. `identity`)
+ *   .1.16[] = prompt section {1 name, 2 text}, covering children of System Prompt/Rules/Skills/Subagents/Plugins groups   (name == breakdown child name, e.g. `identity`)
  *   .1.8[]  = tool definition     {1 name, 2 description, 3 parameters schema (JSON text)}
  *   (.1.1 holds the whole concatenated prompt; it is NOT used, so one section can be shown alone.)
  * Mapping: a breakdown child name is matched to the entry whose field 1 equals it (exact, then

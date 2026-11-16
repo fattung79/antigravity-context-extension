@@ -185,6 +185,7 @@ describe('reply -> Snapshot', () => {
     expect(m.totals).toEqual({ input: 15636, cacheRead: 12000, output: 180, calls: 2 }); // cold call: no cacheReadTokens => 0
     expect(m.lastStepIndex).toBe(5);
     expect(m.breakdown.map((g) => g.name)).toEqual(['System Prompt', 'Tools', 'Chat Messages']);
+    expect(m.breakdown.map((g) => g.type)).toEqual(['TOKEN_TYPE_SYSTEM_PROMPT', 'TOKEN_TYPE_TOOLS', 'TOKEN_TYPE_CHAT']);
   });
 
   it('builds a rpc Snapshot with labels joined from the transcript', () => {

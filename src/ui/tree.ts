@@ -7,6 +7,9 @@ import { getKnownToken } from '../logger';
 import { buildChatHover, buildMetaHover } from './hover';
 import {
   buildTreeHierarchy,
+  groupIcon,
+  groupIconColor,
+  openKindOf,
   formatItemTokens,
   type RenderedItem,
 } from './treeModel';
@@ -18,14 +21,7 @@ export interface HoverDeps {
   token?: () => string | undefined;
 }
 
-/** contextValue for items that support Open: chat (one step), section (System Prompt), tool. */
-export function openKindOf(e: RenderedItem): 'chat' | 'section' | 'tool' | undefined {
-  if (e.type !== 'item') return undefined;
-  if (e.groupName === 'Chat Messages' && e.step !== undefined) return 'chat';
-  if (e.groupName === 'System Prompt' && e.kind === 'section' && e.name) return 'section';
-  if (e.groupName === 'Tools' && e.kind === 'tool' && e.name) return 'tool';
-  return undefined;
-}
+export { openKindOf, groupIcon };
 
 export class ContextInventoryProvider
   implements vscode.TreeDataProvider<RenderedItem>
@@ -115,16 +111,11 @@ export class ContextInventoryProvider
       item.contextValue = 'conversation';
     } else if (element.type === 'group') {
       item.contextValue = 'group';
-      if (element.label === 'Baseline') {
-        item.iconPath = new vscode.ThemeIcon('layers');
+      const color = groupIconColor(element);
+      item.iconPath = new vscode.ThemeIcon(groupIcon(element), color ? new vscode.ThemeColor(color) : undefined);
+      if (element.groupRole === 'baseline') {
         item.tooltip = 'Estimated: gauge minus Chat Messages, so it stands in for System Prompt + Tools in billed tokens. ' +
           "Antigravity's own count usually runs higher; tool-heavy chats can push this estimate up.";
-      } else if (element.label === 'Chat Messages') {
-        item.iconPath = new vscode.ThemeIcon('history');
-      } else if (element.label === 'System Prompt') {
-        item.iconPath = new vscode.ThemeIcon('gear');
-      } else if (element.label === 'Tools') {
-        item.iconPath = new vscode.ThemeIcon('tools');
       }
     } else if (element.type === 'file') {
       item.contextValue = element.openable ? 'ruleFile' : 'ruleFileNoOpen';
@@ -143,7 +134,7 @@ export class ContextInventoryProvider
   resolveTreeItem(item: vscode.TreeItem, element: RenderedItem): vscode.TreeItem {
     if (element.type !== 'item') return item; // file rows keep their static tooltip
     let md: string;
-    if (element.groupName === 'Chat Messages' && element.step !== undefined && element.conversationId && this.hover) {
+    if (element.groupRole === 'chat' && element.step !== undefined && element.conversationId && this.hover) {
       const h = this.hover;
       const read = (s: number | undefined) => {
         if (s === undefined) return null;
